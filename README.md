@@ -129,12 +129,17 @@ tx.commit()
 # To roll back a running transaction just emit tx.rollback() and all
 # operations you added since the last commit will be "forgotten".
 
+# Use Meteor's usual query API to retrieve objects from your versioned
+# collection. Observers work normally, too:
+allNodes = nodes.find().fetch()
+
 # To undo the last transaction, simply call:
 tx.undo()
 
 # This will undo the last transaction of the current client! (Or if you are
 # on the server side then the last transaction commited by the server.) There
 # currently is no global undo.
+# Undo is multi-level. You can undo as many operations as you like.
 # Our OT-algorithm should provide good conflict resolution defaults in case
 # other clients have executed concurrent transactions since the undone
 # transaction. Observe the state of your collection and tell me if you expected
@@ -144,13 +149,19 @@ tx.undo()
 # undoes the effect of the prior transaction. This "insert-only" logic is
 # necessary for our OT and undo/redo algorithms to work correctly.
 
+# Now the addition of edges to our sample object collection will be undone
+nodesWithoutEdges = nodes.find().fetch()
+
 # To redo the last undone transaction, call:
 tx.redo()
 
-# This again works with a client-local undo/redo history.
+# In our example, the edges of the graph have been restored.
+nodesWithEdges = nodes.find().fetch()
+
+# Redo again works with a client-local undo/redo history.
 # NB: As soon as you commit a new transaction you'll loose your redo
 # history (but not your undo history)! This is the usual behavior of
-# redo in most programs I know of so end users shouldn't be too surprised
+# redo in most programs I know of, so end users shouldn't be too surprised
 # of that.
 ```
 
@@ -319,6 +330,12 @@ Call this to reset the version history of the collection. This will
 give you an empty collection without any undo/redo/versioning information.
 
 Only do this if you really want to start over.
+
+
+#### Meteor.VersionedCollection.find()/findOne()
+
+Please consult the documentation of `Meteor.Collection` for a description
+of these methods.
 
 
 
