@@ -119,7 +119,7 @@ for [label, from, to] in [['a', 0, 1], ['b', 0, 2]]
   # this actually adds a new element to the collection and does not replace
   # existing elements! In the case of scalar values, the prior value will be
   # replaced.
-  nodes.setProperty crdtIds[from], 'edges', {label: label, to: crdtIds[to]}
+  nodes.setProperty ids[from], 'edges', {label: label, to: ids[to]}
 
 # Call tx.commit() to actually execute the operations that you staged.
 # Commit executes the currently staged operations and automatically
