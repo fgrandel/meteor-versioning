@@ -3,7 +3,7 @@
   "description": "Adds undo/redo, versioning, basic operational transformation (OT) and transactions to Meteor collections.",
   "homepage": "https://github.com/jerico-dev/meteor-versioning",
   "author": "Florian Grandel (https://github.com/jerico-dev)",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "git": "https://github.com/jerico-dev/meteor-versioning.git",
   "packages": {
     "i18n": { },

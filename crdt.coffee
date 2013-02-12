@@ -25,6 +25,10 @@ class Meteor._CrdtDocument
   # This will lead to a globally unique order (last write wins).
   # We just have to save the latest base clock. If new entries
   # come with the same base clock we need to dedup them by site id.
+  # If we want to insert to the middle of the collection then
+  # we need a more sophisticated index, see the binary tree
+  # index implementation I had in the early versions of this
+  # class (https://gist.github.com/jerico-dev/4566560).
   append: (payload, site) ->
     # Create a new entry.
     property =
