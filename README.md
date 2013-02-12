@@ -198,6 +198,8 @@ server restart.
 Redo the last undone transaction. The redo history contains all undone transactions
 of the local client. It is kept in RAM, too, and will not survive a restart/page reload.
 
+Committing a new transaction will purge the redo (but not the undo) stack.
+
 #### Meteor.tx.purgeLog()
 
 Call this to purge the internal transaction log.
