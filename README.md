@@ -223,15 +223,19 @@ The constructor of `Meteor.VersionedCollection` takes two arguments:
 1. `name`: The collection name
 2. `propertySpec` (optional): If you want to version nested
    documents or nested arrays then you have to specify the
-   property. This is done with an options object that
-   contains two entries:
-   - type: One of '[{}]' and '[*]'. The former
+   property containing them. This is done with a hash of
+   property specifications.
+   The key of each entry is the name of the property to be
+   specified. The value is an options object that contains
+   the following entries:
+   - type: One of '[{}]' or '[*]'. The former
      represents a versioned list of subdocuments
      and the latter a versioned sub-array.
    - locator: Only used for versioned sub-documents.
      This specifies the primary key of the sub-document
      list. It will be used to distinguish updates from
      insertions/deletions.
+   See the "Usage" section above for an example.
 
 If you are just versioning a key/value document
 with scalar values then no property specification is
@@ -246,6 +250,7 @@ myColl = new Meteor.VersionedCollection('myColl')
 #### Meteor.VersionedCollection.insertOne(object)
 
 Arguments:
+
 1. `object`: The object to insert to the collection.
 
 Use this to insert an arbitrary new versioned object.
@@ -265,6 +270,7 @@ The method will return the ID of the object.
 #### Meteor.VersionedCollection.removeOne(id)
 
 Arguments:
+
 1. `id`: The ID of the object to remove.
 
 This method will make the object corresponding to the given ID
@@ -275,6 +281,7 @@ later.
 #### Meteor.VersionedCollection.setProperty(id, key, value)
 
 Arguments:
+
 1. `id`: The ID of the object to update.
 2. `key`: The name of the object property to update.
 3. `value`: The new (or additional) value.
@@ -296,6 +303,7 @@ to actually remove an entry (or all entries) from a collection.
 #### Meteor.VersionedCollection.unsetProperty(id, key[, locator])
 
 Arguments:
+
 1. `id`: The ID of the object to update.
 2. `key`: The name of the object property to update.
 3. `locator` (optional): When updating a property that
