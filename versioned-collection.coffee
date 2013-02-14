@@ -139,7 +139,7 @@ class Meteor.Collection extends Meteor._MongoCollection
       insertObject: (crdtId, args, clock) =>
         # Check preconditions.
         console.assert @_txRunning(),
-          'Trying to execute operation "_insertObject" outside a transaction.'
+          'Trying to execute operation "insertObject" outside a transaction.'
 
         # Does the object already exist (=re-insert)?
         serializedCrdt = @_findCrdt(crdtId)
@@ -175,7 +175,7 @@ class Meteor.Collection extends Meteor._MongoCollection
       removeObject: (crdtId, args, clock) =>
         # Check preconditions
         console.assert @_txRunning(),
-          'Trying to execute operation "_removeObject" outside a transaction.'
+          'Trying to execute operation "removeObject" outside a transaction.'
 
         serializedCrdt = @_findCrdt(crdtId)
         unless serializedCrdt?
@@ -202,7 +202,7 @@ class Meteor.Collection extends Meteor._MongoCollection
       insertProperty: (crdtId, args, clock) =>
         # Check preconditions
         console.assert @_txRunning(),
-          'Trying to execute operation "_insertProperty" outside a transaction.'
+          'Trying to execute operation "insertProperty" outside a transaction.'
 
         serializedCrdt = @_findCrdt(crdtId)
         unless serializedCrdt?
@@ -238,7 +238,7 @@ class Meteor.Collection extends Meteor._MongoCollection
 
         # Check preconditions
         console.assert @_txRunning(),
-          'Trying to execute operation "_removeProperty" outside a transaction.'
+          'Trying to execute operation "removeProperty" outside a transaction.'
 
         serializedCrdt = @_findCrdt(crdtId)
         unless serializedCrdt?
@@ -270,16 +270,16 @@ class Meteor.Collection extends Meteor._MongoCollection
 
         switch origOp
           when 'insertObject'
-            # The inverse of '_insertObject' is '_removeObject'
-            @_removeObject crdtId, {}, clock
+            # The inverse of 'insertObject' is 'removeObject'
+            @removeObject crdtId, {}, clock
 
           when 'removeObject'
-            # To invert '_removeObject' we set the 'delete' flag
+            # To invert 'removeObject' we set the 'delete' flag
             # of the removed (hidden) object back to 'false'.
 
             # Check preconditions
             console.assert @_txRunning(), 'Trying to execute operation ' +
-              '"inverse(_removeObject)" outside a transaction.'
+              '"inverse(removeObject)" outside a transaction.'
 
             serializedCrdt = @_findCrdt(crdtId)
             unless serializedCrdt?
@@ -302,12 +302,12 @@ class Meteor.Collection extends Meteor._MongoCollection
             true
 
           when 'insertProperty'
-            # To invert '_insertProperty' we'll hide the inserted
+            # To invert 'insertProperty' we'll hide the inserted
             # property entry.
 
             # Check preconditions
             console.assert @_txRunning(), 'Trying to execute operation ' +
-              '"inverse(_insertProperty)" outside a transaction.'
+              '"inverse(insertProperty)" outside a transaction.'
 
             serializedCrdt = @_findCrdt(crdtId)
             unless serializedCrdt?
@@ -335,7 +335,7 @@ class Meteor.Collection extends Meteor._MongoCollection
 
             # Check preconditions
             console.assert @_txRunning(), 'Trying to execute operation ' +
-             '"inverse(_removeProperty)" outside a transaction.'
+             '"inverse(removeProperty)" outside a transaction.'
 
             serializedCrdt = @_findCrdt(crdtId)
             unless serializedCrdt?

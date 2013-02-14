@@ -149,7 +149,7 @@
       this._ops = {
         insertObject: function(crdtId, args, clock) {
           var crdt, entry, key, mongoId, serializedCrdt, value, _i, _len, _ref;
-          console.assert(_this._txRunning(), 'Trying to execute operation "_insertObject" outside a transaction.');
+          console.assert(_this._txRunning(), 'Trying to execute operation "insertObject" outside a transaction.');
           serializedCrdt = _this._findCrdt(crdtId);
           if (serializedCrdt != null) {
             if (!serializedCrdt.deleted) {
@@ -196,7 +196,7 @@
         },
         removeObject: function(crdtId, args, clock) {
           var serializedCrdt;
-          console.assert(_this._txRunning(), 'Trying to execute operation "_removeObject" outside a transaction.');
+          console.assert(_this._txRunning(), 'Trying to execute operation "removeObject" outside a transaction.');
           serializedCrdt = _this._findCrdt(crdtId);
           if (serializedCrdt == null) {
             Meteor.log["throw"]('crdt.tryingToDeleteNonexistentCrdt', {
@@ -223,7 +223,7 @@
         },
         insertProperty: function(crdtId, args, clock) {
           var crdt, index, serializedCrdt;
-          console.assert(_this._txRunning(), 'Trying to execute operation "_insertProperty" outside a transaction.');
+          console.assert(_this._txRunning(), 'Trying to execute operation "insertProperty" outside a transaction.');
           serializedCrdt = _this._findCrdt(crdtId);
           if (serializedCrdt == null) {
             Meteor.log["throw"]('crdt.tryingToInsertValueIntoNonexistentCrdt', {
@@ -254,7 +254,7 @@
           if (args.locator != null) {
             locator = args.locator;
           }
-          console.assert(_this._txRunning(), 'Trying to execute operation "_removeProperty" outside a transaction.');
+          console.assert(_this._txRunning(), 'Trying to execute operation "removeProperty" outside a transaction.');
           serializedCrdt = _this._findCrdt(crdtId);
           if (serializedCrdt == null) {
             Meteor.log["throw"]('crdt.tryingToDeleteValueFromNonexistentCrdt', {
@@ -282,9 +282,9 @@
           origOp = args.op, origArgs = args.args, origResult = args.result;
           switch (origOp) {
             case 'insertObject':
-              return _this._removeObject(crdtId, {}, clock);
+              return _this.removeObject(crdtId, {}, clock);
             case 'removeObject':
-              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(_removeObject)" outside a transaction.');
+              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(removeObject)" outside a transaction.');
               serializedCrdt = _this._findCrdt(crdtId);
               if (serializedCrdt == null) {
                 Meteor.log["throw"]('crdt.tryingToUndeleteNonexistentCrdt', {
@@ -309,7 +309,7 @@
               _this._updatedCrdts.push(serializedCrdt._id);
               return true;
             case 'insertProperty':
-              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(_insertProperty)" outside a transaction.');
+              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(insertProperty)" outside a transaction.');
               serializedCrdt = _this._findCrdt(crdtId);
               if (serializedCrdt == null) {
                 Meteor.log["throw"]('crdt.tryingToDeleteValueFromNonexistentCrdt', {
@@ -332,7 +332,7 @@
               _this._updatedCrdts.push(serializedCrdt._id);
               return deletedIndex;
             case 'removeProperty':
-              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(_removeProperty)" outside a transaction.');
+              console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(removeProperty)" outside a transaction.');
               serializedCrdt = _this._findCrdt(crdtId);
               if (serializedCrdt == null) {
                 Meteor.log["throw"]('crdt.tryingToUndeleteValueFromNonexistentCrdt', {
