@@ -271,7 +271,7 @@ class Meteor.Collection extends Meteor._MongoCollection
         switch origOp
           when 'insertObject'
             # The inverse of 'insertObject' is 'removeObject'
-            @removeObject crdtId, {}, clock
+            @_ops.removeObject crdtId, {}, clock
 
           when 'removeObject'
             # To invert 'removeObject' we set the 'delete' flag

@@ -282,7 +282,7 @@
           origOp = args.op, origArgs = args.args, origResult = args.result;
           switch (origOp) {
             case 'insertObject':
-              return _this.removeObject(crdtId, {}, clock);
+              return _this._ops.removeObject(crdtId, {}, clock);
             case 'removeObject':
               console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(removeObject)" outside a transaction.');
               serializedCrdt = _this._findCrdt(crdtId);
