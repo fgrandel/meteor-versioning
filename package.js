@@ -8,4 +8,5 @@ Package.on_use(function (api, where) {
   api.add_files('crdt.js', where);
   api.add_files('versioned-collection.js', where);
   api.add_files('transactions.js', where);
+  api.add_files('messages.js', where);
 });
