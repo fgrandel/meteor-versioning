@@ -390,36 +390,37 @@
 
   })(OriginalCollection);
 
-  OriginalLivedataSubscription = Meteor._LivedataSubscription;
+  if (Meteor.isServer) {
+    OriginalLivedataSubscription = Meteor._LivedataSubscription;
+    Meteor._LivedataSubscription = (function(_super) {
 
-  Meteor._LivedataSubscription = (function(_super) {
+      __extends(_LivedataSubscription, _super);
 
-    __extends(_LivedataSubscription, _super);
-
-    function _LivedataSubscription() {
-      return _LivedataSubscription.__super__.constructor.apply(this, arguments);
-    }
-
-    _LivedataSubscription.prototype.set = function(collection_name, id, attributes) {
-      var coll, crdtAtts, crdtKeys, serializedCrdt;
-      coll = Meteor.tx._getCollection(collection_name);
-      if (coll != null) {
-        serializedCrdt = coll._crdts.findOne({
-          _crdtId: id
-        });
-        if (serializedCrdt != null) {
-          crdtKeys = _.union(_.keys(attributes), ['_id', '_crdtId', '_clock', '_deleted']);
-          crdtAtts = _.pick(serializedCrdt, crdtKeys);
-          _LivedataSubscription.__super__.set.call(this, coll._crdts._name, serializedCrdt._id, crdtAtts);
-        } else {
-          console.assert(false, 'Found snapshot without corresponding CRDT');
-        }
+      function _LivedataSubscription() {
+        return _LivedataSubscription.__super__.constructor.apply(this, arguments);
       }
-      return _LivedataSubscription.__super__.set.call(this, collection_name, id, attributes);
-    };
 
-    return _LivedataSubscription;
+      _LivedataSubscription.prototype.set = function(collection_name, id, attributes) {
+        var coll, crdtAtts, crdtKeys, serializedCrdt;
+        coll = Meteor.tx._getCollection(collection_name);
+        if (coll != null) {
+          serializedCrdt = coll._crdts.findOne({
+            _crdtId: id
+          });
+          if (serializedCrdt != null) {
+            crdtKeys = _.union(_.keys(attributes), ['_id', '_crdtId', '_clock', '_deleted']);
+            crdtAtts = _.pick(serializedCrdt, crdtKeys);
+            _LivedataSubscription.__super__.set.call(this, coll._crdts._name, serializedCrdt._id, crdtAtts);
+          } else {
+            console.assert(false, 'Found snapshot without corresponding CRDT');
+          }
+        }
+        return _LivedataSubscription.__super__.set.call(this, collection_name, id, attributes);
+      };
 
-  })(OriginalLivedataSubscription);
+      return _LivedataSubscription;
+
+    })(OriginalLivedataSubscription);
+  }
 
 }).call(this);

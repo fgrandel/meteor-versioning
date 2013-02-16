@@ -385,21 +385,22 @@ class Meteor.Collection extends OriginalCollection
             Meteor.log.throw 'crdt.cannotInvert', op: origOp
 
 
-# Patch the live subscription to automatically publish the CRDT version
-# together with the snapshot version.
-OriginalLivedataSubscription = Meteor._LivedataSubscription
-class Meteor._LivedataSubscription extends OriginalLivedataSubscription
-  set: (collection_name, id, attributes) ->
-    # If the collection is versioned then publish not only
-    # the snapshot value but also its corresponding crdt.
-    coll = Meteor.tx._getCollection(collection_name)
-    if coll?
-      serializedCrdt = coll._crdts.findOne _crdtId: id
-      if serializedCrdt?
-        crdtKeys = _.union (_.keys attributes),
-          ['_id', '_crdtId', '_clock', '_deleted']
-        crdtAtts = _.pick serializedCrdt, crdtKeys
-        super coll._crdts._name, serializedCrdt._id, crdtAtts
-      else
-        console.assert false, 'Found snapshot without corresponding CRDT'
-    super collection_name, id, attributes
+if Meteor.isServer
+  # Patch the live subscription to automatically publish the CRDT version
+  # together with the snapshot version.
+  OriginalLivedataSubscription = Meteor._LivedataSubscription
+  class Meteor._LivedataSubscription extends OriginalLivedataSubscription
+    set: (collection_name, id, attributes) ->
+      # If the collection is versioned then publish not only
+      # the snapshot value but also its corresponding crdt.
+      coll = Meteor.tx._getCollection(collection_name)
+      if coll?
+        serializedCrdt = coll._crdts.findOne _crdtId: id
+        if serializedCrdt?
+          crdtKeys = _.union (_.keys attributes),
+            ['_id', '_crdtId', '_clock', '_deleted']
+          crdtAtts = _.pick serializedCrdt, crdtKeys
+          super coll._crdts._name, serializedCrdt._id, crdtAtts
+        else
+          console.assert false, 'Found snapshot without corresponding CRDT'
+      super collection_name, id, attributes
