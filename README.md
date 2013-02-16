@@ -2,6 +2,55 @@ Undo/Redo, Versioning, Operational Transformation and Transactions for Meteor Co
 =========================================================================================
 
 
+What does this package do?
+--------------------------
+
+This package provides four additional and closely related features to Meteor:
+
+1. Transactions
+2. Infinite-Level Undo/Redo
+3. Automatic Conflict Resolution for Concurrent Distributed Transactions (aka "Operational
+   Transformation", "Preservation of Intent and Causality")
+4. Versioning of Collection Objects
+
+
+What does this mean?
+
+The package applies some magic to Meteor collections so they become versioned and transactional. This
+means that you can package an arbitrary number of changes across an arbitrary number of collections and
+collection objects into a single transaction that will either atomically succeed or fail.
+
+Based on this transactional behavior, the package provides an infinite-level, client-specific undo/redo
+stack so that you can undo (or redo) any previously executed transaction with an API call as simple as
+`undo()` (or `redo()`).
+
+Meteor's 'last-write-wins' default conflict resolution mechanism does not work well when you have many
+users working on the same few objects. Conflicting changes will simply replace each other without trying
+to intelligently guess how changes could be "merged" to better reflect the intent of collaborating users.
+
+We replace this default behavior with fully automatic conflict resolution preserving causality and intent.
+This is achieved with a technology that is equivalent to
+"[Operational Transformation](https://en.wikipedia.org/wiki/Operational_transformation)" (OT), called
+"[Commutative Replicated Data Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
+The net effect is that concurrent updates from different clients to the same collection object will not
+overwrite each other but will be merged intelligently.
+
+Versioning is already built into the functionality of the package and can be used in principle. We just do
+not yet provide a high-level API to retrieve specific versions of a collection or an object. Every
+versioned collection comes with a second "twin collection" that contains the whole version history of
+all objects. You can have a look at the Mongo database and you'll see what I mean. We'll eventually
+provide a public high-level API to access that collection more comfortably. But if you feel brave you can
+already have a look at it and try to figure out how versioning is being implemented. Have a look
+at [this inline comment](https://github.com/jerico-dev/meteor-versioning/blob/master/crdt.coffee#L39) which
+will help you to better understand the data format.
+
+
+Requirements
+------------
+
+This package requires Meteor 0.5.5 or later.
+
+
 Installation
 ------------
 
@@ -13,15 +62,8 @@ Type inside your application directory:
 $ mrt add versioning
 ```
 
-The package requires Meteor 0.5.5 or later.
-
-NB: Currently the package relies on the "autopublish" package. We'll change that with the next release!
-
-
 Usage
 -----
-
-The package applies some magic to Meteor collections so they become versioned and transactional.
 
 See the following sample code which works both, on the client and server. The example is in CoffeeScript for better readability.
 
@@ -147,6 +189,40 @@ nodesWithEdges = Nodes.find().fetch()
 ```
 
 
+Publish/Subscribe
+-----------------
+
+`Meteor.publish()` and `Meteor.subscribe()` work normally with versioned
+collections.
+
+
+Security
+--------
+
+All changes to the versioned connection are packaged as transactions and
+then funneled through an internal Meteor method. We currently do not check any
+security validators (i.e. `Meteor.Collection.allow()/deny()`) in this method.
+
+This means that setting allow/deny rules on a versioned collection will
+NOT WORK right now. We'll fix this in a later version.
+
+
+Cursors
+-------
+
+Cursors returned by calling `find()/findOne()` on a versioned collection will
+work normally. This includes all sub-methods of a cursor, e.g. `forEach()/map()`,
+observers, etc.
+
+
+Latency Compensation
+--------------------
+
+Updates to versioned collections have built-in latency compensation. Changes to
+versioned collections on the client will be simulated until the server returns
+with an authoritative version of the collection.
+
+
 API reference
 -------------
 
@@ -217,7 +293,7 @@ The constructor of `Meteor.Collection` takes two arguments:
      with one entry per non-default property in the
      props option.
      The key of each entry is the name of the property
-     to be specified. The value is a object that
+     to be specified. The value is an object that
      contains the following entries:
      - `type`: One of '[{}]' or '[*]'. The former
        represents a versioned list of subdocuments
@@ -358,6 +434,19 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
+Known Limitations
+-----------------
+
+* Security (allow/deny) does not work for versioned collections.
+* The current mutator API is too low-level. We should implement the full
+  MiniMongo API.
+* If you publish a versioned collection under a different name to the
+  client (by manually publishing documents from it under a different
+  collection name) then you won't be able to change that collection from
+  the client directly. You'll have to change the original collection
+  and wait for the changes to propagate.
+* We should provide a high-level versioning API.
+
 
 Package Dependencies
 --------------------
@@ -367,8 +456,7 @@ and [i18n](https://github.com/jerico-dev/meteor-i18n) implementation. Both have
 already been published as packages to the Atmosphere and will be automatically
 installed when installing this package.
 
-Have a look at the documentation of the two packages if you'd like to
-use them in your project.
+Have a look at the documentation of the two packages if you'd like to use them in your project.
 
 
 Questions and Feature Requests
