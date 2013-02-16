@@ -19,8 +19,8 @@ Meteor.i18nMessages.crdt =
   cannotInvert: 'Cannot invert unknown operation {{op}}.'
   tryingToUndeleteNonexistentCrdt: 'Trying to undelete the non-existent object with id {{crdtId}} from crdt "{{collection}}".'
   tryingToUndeleteVisibleCrdt: 'Trying to undelete the already visible object with id {{crdtId}} from crdt "{{collection}}".'
-  tryingToUnDeleteNonexistentIndex: 'Trying to (un)delete the non-existent index {{index}}.'
-  tryingToUnDeleteIndexInVisibleEntry: 'Trying to (un)delete the already (in)visible index {{index}}.'
-  tryingToUnDeleteIndexWithWrongKey: 'Trying to (un)delete index {{index}} but it corresponds to key "{{actualKey}}" rather than key "{{shouldKey}}". Aborted.'
+  tryingToUnDeleteNonexistentIndex: 'Trying to (un)delete the non-existent index "{{key}}.{{index}}.{{site}}.{{change}}".'
+  tryingToUnDeleteIndexInVisibleEntry: 'Trying to (un)delete the already (in)visible index "{{key}}.{{index}}.{{site}}.{{change}}".'
   tryingToUndeleteValueFromNonexistentCrdt: 'Trying to undelete the value "{{key}}[{{locator}}]" from a non-existent object with id {{crdtId}} in crdt "{{collection}}".'
+  tryingToInsertIndexOutOfOrder: 'Trying to insert index out of order: {{key}}.{{index}}.{{site}}.'
 

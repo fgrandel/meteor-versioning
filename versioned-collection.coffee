@@ -1,8 +1,6 @@
-# Move the original collections implementation.
-Meteor._MongoCollection = Meteor.Collection
-
-# Replace the original collection implementation with our own.
-class Meteor.Collection extends Meteor._MongoCollection
+# Patch the original collection to support versioning.
+OriginalCollection = Meteor.Collection
+class Meteor.Collection extends OriginalCollection
   constructor: (name, options = {}) ->
     super name, options
 
@@ -10,17 +8,21 @@ class Meteor.Collection extends Meteor._MongoCollection
     @_versioned = if options.versioned? then options.versioned else false
     return @ unless @_versioned
 
-    # If this is a versioned collection then add our own magic.
-    @_propSpec = if options.props? then options.props else {}
+    # If this is a versioned collection then add our own magic...
 
     # Create the non-public CRDT version of managed collections.
-    @_crdts = new Meteor._MongoCollection "_#{name}Crdts"
+    @_crdts = new OriginalCollection "_#{name}Crdts",
+      _preventAutopublish: true
     if Meteor.isServer then @_crdts._ensureIndex crdtId: 1
 
-    # Hide normal mutators.
-    _.each ['insert', 'update', 'remove'], (method) =>
-      @["_#{method}"] = @[method]
-      delete @[method]
+    @_propSpec = if options.props? then options.props else {}
+
+    # Hide normal mutators and validators which don't work
+    # (or shouldn't be accessed directly) in versioned collections.
+    _.each ['insert', 'update', 'remove', 'allow', 'deny'],
+      (method) =>
+        @["_#{method}"] = @[method]
+        delete @[method]
 
     # Register this collection with the transaction manager.
     @_tx = Meteor.tx
@@ -83,8 +85,22 @@ class Meteor.Collection extends Meteor._MongoCollection
     #######################
     # Transaction Support #
     #######################
-    @_findCrdt = (crdtId) ->
-      @_crdts.findOne crdtId: crdtId
+    @_getCrdt = (crdtId) ->
+      serializedCrdt = @_crdts.findOne _crdtId: crdtId
+      if serializedCrdt?
+        new Meteor._CrdtDocument @_propSpec, serializedCrdt
+      else
+        undefined
+
+    # Allocate transaction-specific indexes per CRDT and
+    # property.
+    @_propertyIdxs = {}
+    @_getCurrentIndex = (crdt, key) ->
+      @_propertyIdxs[crdt.id] = {} unless @_propertyIdxs[crdt.id]?
+      unless @_propertyIdxs[crdt.id][key]?
+        @_propertyIdxs[crdt.id][key] = crdt.getNextIndex key
+      @_propertyIdxs[crdt.id][key]
+
 
     @_updatedCrdts = undefined
 
@@ -94,6 +110,10 @@ class Meteor.Collection extends Meteor._MongoCollection
       console.assert not @_txRunning(),
         'Trying to start an already running transaction.'
       @_updatedCrdts = []
+
+      # Make sure that we allocate new property indexes
+      # for this transaction.
+      @_propertyIdxs = {}
       true
 
     @_txCommit = ->
@@ -136,34 +156,35 @@ class Meteor.Collection extends Meteor._MongoCollection
     # args:
     #   object: the key/value pairs to create
     @_ops =
-      insertObject: (crdtId, args, clock) =>
+      insertObject: (crdtId, args, clock, site) =>
         # Check preconditions.
         console.assert @_txRunning(),
           'Trying to execute operation "insertObject" outside a transaction.'
 
         # Does the object already exist (=re-insert)?
-        serializedCrdt = @_findCrdt(crdtId)
-        if serializedCrdt?
-          unless serializedCrdt.deleted
+        crdt = @_getCrdt(crdtId)
+        if crdt?
+          unless crdt.deleted
             Meteor.log.throw 'crdt.tryingToUndeleteVisibleCrdt',
               {collection: @_name, crdtId: crdtId}
           # We are actually un-deleting an existing object (happens on redo).
           # Mark the object as 'undeleted' which will make it publicly
           # visible again.
-          @_crdts.update {crdtId: crdtId},
-            {$set: {deleted: false, clock: clock}}
-          mongoId = serializedCrdt._id
+          @_crdts.update {_crdtId: crdtId},
+            {$set: {_deleted: false, _clock: clock}}
+          mongoId = crdt.id
         else
           # Create a new CRDT.
           crdt = new Meteor._CrdtDocument @_propSpec
           crdt.crdtId = crdtId
           crdt.clock = clock
           for key, value of args.object
+            index = @_getCurrentIndex(crdt, key)
             if _.isArray value
               for entry in value
-                crdt.append {key: key, value: entry}
+                crdt.insertAtIndex key, entry, index, site
             else
-              crdt.append {key: key, value: value}
+              crdt.insertAtIndex key, value, index, site
           mongoId = @_crdts.insert crdt.serialize()
 
         # Remember the inserted/undeleted CRDT for txCommit.
@@ -172,40 +193,41 @@ class Meteor.Collection extends Meteor._MongoCollection
 
       # Marks an object as deleted (i.e. makes it publicly invisible).
       # args: empty
-      removeObject: (crdtId, args, clock) =>
+      removeObject: (crdtId, args, clock, site) =>
         # Check preconditions
         console.assert @_txRunning(),
           'Trying to execute operation "removeObject" outside a transaction.'
 
-        serializedCrdt = @_findCrdt(crdtId)
-        unless serializedCrdt?
+        crdt = @_getCrdt(crdtId)
+        unless crdt?
           Meteor.log.throw 'crdt.tryingToDeleteNonexistentCrdt',
             {collection: @_name, crdtId: crdtId}
 
-        if serializedCrdt.deleted
+        if crdt.deleted
           Meteor.log.throw 'crdt.tryingToDeleteCrdtTwice',
             {collection: @_name, crdtId: crdtId}
 
 
         # Mark the object as 'deleted' which will hide it from
         # the public collection.
-        @_crdts.update {crdtId: crdtId},
-          {$set: {deleted: true, clock: clock}}
+        @_crdts.update {_crdtId: crdtId},
+          {$set: {_deleted: true, _clock: clock}}
 
         # Remember the changed CRDT for txCommit.
-        @_updatedCrdts.push serializedCrdt._id
+        @_updatedCrdts.push crdt.id
         crdtId
 
       # Add or update a key/value pair.
       # args:
       #   key, value: the key/value pair to change
-      insertProperty: (crdtId, args, clock) =>
+      insertProperty: (crdtId, args, clock, site) =>
+        debugger
         # Check preconditions
         console.assert @_txRunning(),
           'Trying to execute operation "insertProperty" outside a transaction.'
 
-        serializedCrdt = @_findCrdt(crdtId)
-        unless serializedCrdt?
+        crdt = @_getCrdt(crdtId)
+        unless crdt?
           Meteor.log.throw 'crdt.tryingToInsertValueIntoNonexistentCrdt',
             {key: args.key, collection: @_name, crdtId: crdtId}
 
@@ -213,15 +235,15 @@ class Meteor.Collection extends Meteor._MongoCollection
         # TODO: Check that the field value is valid based on the field type.
 
         # Append the new key/value pair to the property list of the CRDT.
-        crdt = new Meteor._CrdtDocument @_propSpec,
-          serializedCrdt
-        index = crdt.append {key: args.key, value: args.value}
-        @_crdts.update {crdtId: crdtId},
-          {$set: {properties: crdt.serialize().properties, clock: clock}}
+        index = @_getCurrentIndex(crdt, args.key)
+        position = crdt.insertAtIndex args.key, args.value, index, site
+        changedProps = _clock: clock
+        changedProps[args.key] = crdt.serialize()[args.key]
+        @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
 
         # Remember the changed CRDT for txCommit.
-        @_updatedCrdts.push serializedCrdt._id
-        index
+        @_updatedCrdts.push crdt.id
+        position
 
       # Marks a key/value pair as deleted (i.e. makes it publicly invisible).
       # args:
@@ -231,7 +253,7 @@ class Meteor.Collection extends Meteor._MongoCollection
       #       the value of the subkey of the property to be deleted
       #     - if the property has type '[*]' (array) then
       #       the position of the value to be deleted
-      removeProperty: (crdtId, args, clock) =>
+      removeProperty: (crdtId, args, clock, site) =>
         # Determine the locator (if any)
         locator = null
         if args.locator? then locator = args.locator
@@ -240,24 +262,22 @@ class Meteor.Collection extends Meteor._MongoCollection
         console.assert @_txRunning(),
           'Trying to execute operation "removeProperty" outside a transaction.'
 
-        serializedCrdt = @_findCrdt(crdtId)
-        unless serializedCrdt?
+        crdt = @_getCrdt(crdtId)
+        unless crdt?
           Meteor.log.throw 'crdt.tryingToDeleteValueFromNonexistentCrdt',
             key: args.key
             locator: locator
             collection: @_name
             crdtId: crdtId
 
-        crdt = new Meteor._CrdtDocument @_propSpec,
-          serializedCrdt
-
         # Delete the key/value pair at the given position.
         deletedIndices = crdt.delete args.key, locator
-        @_crdts.update {crdtId: crdtId},
-          {$set: {properties: crdt.serialize().properties, clock: clock}}
+        changedProps = _clock: clock
+        changedProps[args.key] = crdt.serialize()[args.key]
+        @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
 
         # Remember the changed CRDT for txCommit.
-        @_updatedCrdts.push serializedCrdt._id
+        @_updatedCrdts.push crdt.id
         deletedIndices
 
       # Inverse operation support.
@@ -265,7 +285,7 @@ class Meteor.Collection extends Meteor._MongoCollection
       #   op: the name of the operation to reverse
       #   args: the original arguments
       #   result: the original result
-      inverse: (crdtId, args, clock) =>
+      inverse: (crdtId, args, clock, site) =>
         {op: origOp, args: origArgs, result: origResult} = args
 
         switch origOp
@@ -281,11 +301,11 @@ class Meteor.Collection extends Meteor._MongoCollection
             console.assert @_txRunning(), 'Trying to execute operation ' +
               '"inverse(removeObject)" outside a transaction.'
 
-            serializedCrdt = @_findCrdt(crdtId)
-            unless serializedCrdt?
+            crdt = @_getCrdt(crdtId)
+            unless crdt?
               Meteor.log.throw 'crdt.tryingToUndeleteNonexistentCrdt',
                 {collection: @_name, crdtId: crdtId}
-            unless serializedCrdt.deleted
+            unless crdt.deleted
               # This may happen when two sites delete exactly the
               # same crdt concurrently. As this is not probable we
               # provide a warning as this may point to an error.
@@ -294,11 +314,11 @@ class Meteor.Collection extends Meteor._MongoCollection
 
             # Mark the object as 'undeleted' which will make it
             # publicly visible again.
-            @_crdts.update {crdtId: crdtId},
-              {$set: {deleted: false, clock: clock}}
+            @_crdts.update {_crdtId: crdtId},
+              {$set: {_deleted: false, _clock: clock}}
 
             # Remember the changed CRDT for txCommit.
-            @_updatedCrdts.push serializedCrdt._id
+            @_updatedCrdts.push crdt.id
             true
 
           when 'insertProperty'
@@ -309,24 +329,25 @@ class Meteor.Collection extends Meteor._MongoCollection
             console.assert @_txRunning(), 'Trying to execute operation ' +
               '"inverse(insertProperty)" outside a transaction.'
 
-            serializedCrdt = @_findCrdt(crdtId)
-            unless serializedCrdt?
+            crdt = @_getCrdt(crdtId)
+            unless crdt?
               Meteor.log.throw 'crdt.tryingToDeleteValueFromNonexistentCrdt',
                 key: origArgs.key
                 locator: origResult
                 collection: @_name
                 crdtId: crdtId
-            crdt = new Meteor._CrdtDocument @_propSpec,
-              serializedCrdt
 
             # Delete the key/value pair with the index returned from the
             # original operation.
-            deletedIndex = crdt.deleteIndex origResult, origArgs.key
-            @_crdts.update {crdtId: crdtId},
-              {$set: {properties: crdt.serialize().properties, clock: clock}}
+            [origIndex, origSite, origChange] = origResult
+            deletedIndex = crdt.deleteIndex origArgs.key,
+              origIndex, origSite, origChange
+            changedProps = _clock: clock
+            changedProps[origArgs.key] = crdt.serialize()[origArgs.key]
+            @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
 
             # Remember the changed CRDT for txCommit.
-            @_updatedCrdts.push serializedCrdt._id
+            @_updatedCrdts.push crdt.id
             deletedIndex
 
           when 'removeProperty'
@@ -337,28 +358,48 @@ class Meteor.Collection extends Meteor._MongoCollection
             console.assert @_txRunning(), 'Trying to execute operation ' +
              '"inverse(removeProperty)" outside a transaction.'
 
-            serializedCrdt = @_findCrdt(crdtId)
-            unless serializedCrdt?
+            crdt = @_getCrdt(crdtId)
+            unless crdt?
               Meteor.log.throw 'crdt.tryingToUndeleteValueFromNonexistentCrdt',
                 key: origArgs.key
                 locator: origResult[0]
                 collection: @_name
                 crdtId: crdtId
-            crdt = new Meteor._CrdtDocument @_propSpec,
-              serializedCrdt
 
             # Undelete the key/value pair(s) with indices returned
             # from the original operation.
             undeletedIndices =
-              for deletedIndex in origResult
-                crdt.undeleteIndex deletedIndex, origArgs.key
-            @_crdts.update {crdtId: crdtId},
-              {$set: {properties: crdt.serialize().properties, clock: clock}}
+              for [origIndex, origSite, origChange] in origResult
+                crdt.undeleteIndex origArgs.key,
+                  origIndex, origSite, origChange
+            changedProps = _clock: clock
+            changedProps[origArgs.key] = crdt.serialize()[origArgs.key]
+            @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
 
             # Remember the changed CRDT for txCommit.
-            @_updatedCrdts.push serializedCrdt._id
+            @_updatedCrdts.push crdt.id
             undeletedIndices
 
           else
             # We cannot invert the given operation.
             Meteor.log.throw 'crdt.cannotInvert', op: origOp
+
+
+# Patch the live subscription to automatically publish the CRDT version
+# together with the snapshot version.
+OriginalLivedataSubscription = Meteor._LivedataSubscription
+class Meteor._LivedataSubscription extends OriginalLivedataSubscription
+  set: (collection_name, id, attributes) ->
+    # If the collection is versioned then publish not only
+    # the snapshot value but also its corresponding crdt.
+    coll = Meteor.tx._getCollection(collection_name)
+    if coll?
+      serializedCrdt = coll._crdts.findOne _crdtId: id
+      if serializedCrdt?
+        crdtKeys = _.union (_.keys attributes),
+          ['_id', '_crdtId', '_clock', '_deleted']
+        crdtAtts = _.pick serializedCrdt, crdtKeys
+        super coll._crdts._name, serializedCrdt._id, crdtAtts
+      else
+        console.assert false, 'Found snapshot without corresponding CRDT'
+    super collection_name, id, attributes

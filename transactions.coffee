@@ -73,6 +73,8 @@ class Meteor._TransactionsManager
   _addCollection: (collection) ->
     @_collections[collection._name] = collection
 
+  _getCollection: (collection) -> @_collections[collection]
+
   _addOperation: (operation) -> @_currentOps.push operation
 
   # Make a few consistency checks and add the transaction
@@ -93,7 +95,7 @@ class Meteor._TransactionsManager
       op.baseClock = baseClock
 
       # Find the last CRDT version clock.
-      crdt = @_collections[op.collection]._findCrdt op.collection, op.crdtId
+      crdt = @_collections[op.collection]._getCrdt op.crdtId
       lastClock = if crdt? then crdt.clock else {}
 
       # Check whether the operation has already been executed, i.e.
@@ -126,6 +128,7 @@ class Meteor._TransactionsManager
 
   _doTransaction: (tx) ->
     txId = @_getTxId(tx)
+    txSite = tx.initiatingSite
 
     # Execute all operations in the pending transaction.
     txColls = {}
@@ -142,7 +145,7 @@ class Meteor._TransactionsManager
 
         # Execute the operation.
         args = if op.args? then op.args else {}
-        op.result = coll._ops[op.op] op.crdtId, args, op.clock
+        op.result = coll._ops[op.op] op.crdtId, args, op.clock, txSite
       catch e
         Meteor.log.error 'transaction.operationProducedError',
           op: op.op
@@ -189,7 +192,7 @@ class Meteor._TransactionsManager
         executableTx = pendingTx
         for op in pendingTx.operations
           collection = @_collections[op.collection]
-          crdt = collection._findCrdt op.collection, op.crdtId
+          crdt = collection._getCrdt op.crdtId
           lastClock = if crdt? then crdt.clock else {}
           if @_happenedBefore lastClock, op.baseClock
             # Do not execute the transaction
@@ -224,7 +227,7 @@ class Meteor._TransactionsManager
   _queueInternal: (operations, isUndo = false) ->
     # Advance the CRDT version clocks.
     for op in operations
-      crdt = @_collections[op.collection]._findCrdt op.collection, op.crdtId
+      crdt = @_collections[op.collection]._getCrdt op.crdtId
       op.clock = @_ticTac crdt?.clock
     # Build the transaction.
     tx =

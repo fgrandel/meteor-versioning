@@ -74,6 +74,10 @@
       return this._collections[collection._name] = collection;
     };
 
+    _TransactionsManager.prototype._getCollection = function(collection) {
+      return this._collections[collection];
+    };
+
     _TransactionsManager.prototype._addOperation = function(operation) {
       return this._currentOps.push(operation);
     };
@@ -91,7 +95,7 @@
         baseClock[txSite] = (this._getTick(opClock, txSite)) - 1;
         console.assert(baseClock[txSite] >= 0);
         op.baseClock = baseClock;
-        crdt = this._collections[op.collection]._findCrdt(op.collection, op.crdtId);
+        crdt = this._collections[op.collection]._getCrdt(op.crdtId);
         lastClock = crdt != null ? crdt.clock : {};
         if (this._happenedBefore(baseClock, lastClock)) {
           Meteor.log.error('transaction.receivedDuplicateTx', {
@@ -128,8 +132,9 @@
     };
 
     _TransactionsManager.prototype._doTransaction = function(tx) {
-      var args, coll, name, op, txColls, txId, _i, _len, _ref;
+      var args, coll, name, op, txColls, txId, txSite, _i, _len, _ref;
       txId = this._getTxId(tx);
+      txSite = tx.initiatingSite;
       txColls = {};
       _ref = tx.operations;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -142,7 +147,7 @@
             coll._txStart();
           }
           args = op.args != null ? op.args : {};
-          op.result = coll._ops[op.op](op.crdtId, args, op.clock);
+          op.result = coll._ops[op.op](op.crdtId, args, op.clock, txSite);
         } catch (e) {
           Meteor.log.error('transaction.operationProducedError', {
             op: op.op,
@@ -173,7 +178,7 @@
           for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
             op = _ref1[_j];
             collection = this._collections[op.collection];
-            crdt = collection._findCrdt(op.collection, op.crdtId);
+            crdt = collection._getCrdt(op.crdtId);
             lastClock = crdt != null ? crdt.clock : {};
             if (this._happenedBefore(lastClock, op.baseClock)) {
               executableTx = null;
@@ -217,7 +222,7 @@
       }
       for (_i = 0, _len = operations.length; _i < _len; _i++) {
         op = operations[_i];
-        crdt = this._collections[op.collection]._findCrdt(op.collection, op.crdtId);
+        crdt = this._collections[op.collection]._getCrdt(op.crdtId);
         op.clock = this._ticTac(crdt != null ? crdt.clock : void 0);
       }
       tx = {
