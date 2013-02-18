@@ -415,7 +415,6 @@ if Meteor.isServer
       for crdtKey in crdtKeys
         unless _.isEqual(currentCrdt[crdtKey], oldCrdt[crdtKey])
           crdtAtts[crdtKey] = currentCrdt[crdtKey]
-      console.log crdtAtts
       [coll._crdts._name, currentCrdt._id, crdtAtts]
 
     set: (collection_name, id, attributes, syncCrdt = true) ->

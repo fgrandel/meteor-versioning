@@ -424,7 +424,6 @@
             crdtAtts[crdtKey] = currentCrdt[crdtKey];
           }
         }
-        console.log(crdtAtts);
         return [coll._crdts._name, currentCrdt._id, crdtAtts];
       };
 
