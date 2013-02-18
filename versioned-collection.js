@@ -295,7 +295,7 @@
           origOp = args.op, origArgs = args.args, origResult = args.result;
           switch (origOp) {
             case 'insertObject':
-              return _this._ops.removeObject(crdtId, {}, clock);
+              return _this._ops.removeObject(crdtId, {}, clock, site);
             case 'removeObject':
               console.assert(_this._txRunning(), 'Trying to execute operation ' + '"inverse(removeObject)" outside a transaction.');
               crdt = _this._getCrdt(crdtId);
@@ -399,22 +399,58 @@
         return _LivedataSubscription.__super__.constructor.apply(this, arguments);
       }
 
-      _LivedataSubscription.prototype.set = function(collection_name, id, attributes) {
-        var coll, crdtAtts, crdtKeys, serializedCrdt;
+      _LivedataSubscription.prototype._synchronizeCrdt = function(collection_name, id, attributes) {
+        var changedKeys, coll, crdtAtts, crdtKey, crdtKeys, currentCrdt, internalKeys, oldCrdt, publishedKeys, _i, _len, _ref, _ref1, _ref2;
         coll = Meteor.tx._getCollection(collection_name);
-        if (coll != null) {
-          serializedCrdt = coll._crdts.findOne({
-            _crdtId: id
-          });
-          if (serializedCrdt != null) {
-            crdtKeys = _.union(_.keys(attributes), ['_id', '_crdtId', '_clock', '_deleted']);
-            crdtAtts = _.pick(serializedCrdt, crdtKeys);
-            _LivedataSubscription.__super__.set.call(this, coll._crdts._name, serializedCrdt._id, crdtAtts);
-          } else {
-            console.assert(false, 'Found snapshot without corresponding CRDT');
+        if (coll == null) {
+          return;
+        }
+        currentCrdt = (_ref = coll._crdts.findOne({
+          _crdtId: id
+        })) != null ? _ref : {};
+        if (currentCrdt == null) {
+          console.assert(false, 'Found snapshot without corresponding CRDT');
+          return;
+        }
+        internalKeys = ['_id', '_crdtId', '_clock', '_deleted'];
+        changedKeys = _.keys(attributes);
+        oldCrdt = (_ref1 = ((_ref2 = this.snapshot[coll._crdts._name]) != null ? _ref2[currentCrdt._id] : void 0)) != null ? _ref1 : {};
+        publishedKeys = _.keys(oldCrdt);
+        crdtKeys = _.union(internalKeys, changedKeys, publishedKeys);
+        crdtAtts = {};
+        for (_i = 0, _len = crdtKeys.length; _i < _len; _i++) {
+          crdtKey = crdtKeys[_i];
+          if (!_.isEqual(currentCrdt[crdtKey], oldCrdt[crdtKey])) {
+            crdtAtts[crdtKey] = currentCrdt[crdtKey];
+          }
+        }
+        console.log(crdtAtts);
+        return [coll._crdts._name, currentCrdt._id, crdtAtts];
+      };
+
+      _LivedataSubscription.prototype.set = function(collection_name, id, attributes, syncCrdt) {
+        var crdtAtts, crdtColl, crdtId, crdtSet;
+        if (syncCrdt == null) {
+          syncCrdt = true;
+        }
+        if (syncCrdt) {
+          crdtSet = this._synchronizeCrdt(collection_name, id, attributes);
+          if (_.isArray(crdtSet)) {
+            crdtColl = crdtSet[0], crdtId = crdtSet[1], crdtAtts = crdtSet[2];
+            _LivedataSubscription.__super__.set.call(this, crdtColl, crdtId, crdtAtts);
           }
         }
         return _LivedataSubscription.__super__.set.call(this, collection_name, id, attributes);
+      };
+
+      _LivedataSubscription.prototype.unset = function(collection_name, id, attributes) {
+        var crdtAtts, crdtColl, crdtId, crdtSet;
+        crdtSet = this._synchronizeCrdt(collection_name, id, attributes);
+        if (_.isArray(crdtSet)) {
+          crdtColl = crdtSet[0], crdtId = crdtSet[1], crdtAtts = crdtSet[2];
+          this.set(crdtColl, crdtId, crdtAtts, false);
+        }
+        return _LivedataSubscription.__super__.unset.call(this, collection_name, id, attributes);
       };
 
       return _LivedataSubscription;

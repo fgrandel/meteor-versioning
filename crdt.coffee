@@ -33,7 +33,7 @@ class Meteor._CrdtDocument
       sortedSites = _.sortBy sites, (payload) -> payload.site
       for changes in sortedSites
         for payload in changes
-          payloads.push payload
+          payloads.push payload unless payload.deleted
     payloads
 
   # Inserts the payload into the property list.
@@ -218,7 +218,13 @@ class Meteor._CrdtDocument
     if @deleted
       null
     else
-      snapshot = _id: @crdtId
+      # Including the clock in the snapshot is not only
+      # informative but makes sure that we always get
+      # notified over DDP when something changed in the
+      # CRDT and get a chance to publish those changes.
+      snapshot =
+        _id: @crdtId
+        _clock: @clock
       # Build properties but filter deleted entries.
       for key of @properties
         for payload in @getOrderedVisiblePayloads(key)

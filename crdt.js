@@ -55,7 +55,9 @@
           changes = sortedSites[_k];
           for (_l = 0, _len3 = changes.length; _l < _len3; _l++) {
             payload = changes[_l];
-            payloads.push(payload);
+            if (!payload.deleted) {
+              payloads.push(payload);
+            }
           }
         }
       }
@@ -180,7 +182,8 @@
         return null;
       } else {
         snapshot = {
-          _id: this.crdtId
+          _id: this.crdtId,
+          _clock: this.clock
         };
         for (key in this.properties) {
           _ref = this.getOrderedVisiblePayloads(key);

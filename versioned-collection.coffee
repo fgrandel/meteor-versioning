@@ -290,7 +290,7 @@ class Meteor.Collection extends OriginalCollection
         switch origOp
           when 'insertObject'
             # The inverse of 'insertObject' is 'removeObject'
-            @_ops.removeObject crdtId, {}, clock
+            @_ops.removeObject crdtId, {}, clock, site
 
           when 'removeObject'
             # To invert 'removeObject' we set the 'delete' flag
@@ -389,17 +389,47 @@ if Meteor.isServer
   # together with the snapshot version.
   OriginalLivedataSubscription = Meteor._LivedataSubscription
   class Meteor._LivedataSubscription extends OriginalLivedataSubscription
-    set: (collection_name, id, attributes) ->
+    _synchronizeCrdt: (collection_name, id, attributes) ->
       # If the collection is versioned then publish not only
-      # the snapshot value but also its corresponding crdt.
+      # the snapshot value but also its crresponding crdt.
       coll = Meteor.tx._getCollection(collection_name)
-      if coll?
-        serializedCrdt = coll._crdts.findOne _crdtId: id
-        if serializedCrdt?
-          crdtKeys = _.union (_.keys attributes),
-            ['_id', '_crdtId', '_clock', '_deleted']
-          crdtAtts = _.pick serializedCrdt, crdtKeys
-          super coll._crdts._name, serializedCrdt._id, crdtAtts
-        else
-          console.assert false, 'Found snapshot without corresponding CRDT'
+      return unless coll?
+      currentCrdt = (coll._crdts.findOne _crdtId: id) ? {}
+      unless currentCrdt?
+        console.assert false, 'Found snapshot without corresponding CRDT'
+        return
+      # We must first establish all keys that maybe have
+      # to be published.
+      # 1) Internal keys
+      internalKeys = ['_id', '_crdtId', '_clock', '_deleted']
+      # 2) Keys that that changed.
+      changedKeys = _.keys attributes
+      # 3) Keys that have been published previously.
+      # NB: We never remove previously published CRDT keys from the
+      # client, otherwise local undo simulation does not work. This
+      # is part of our insert-only CRDT policy.
+      oldCrdt = (@snapshot[coll._crdts._name]?[currentCrdt._id]) ? {}
+      publishedKeys = _.keys oldCrdt
+      crdtKeys = _.union internalKeys, changedKeys, publishedKeys
+      crdtAtts = {}
+      for crdtKey in crdtKeys
+        unless _.isEqual(currentCrdt[crdtKey], oldCrdt[crdtKey])
+          crdtAtts[crdtKey] = currentCrdt[crdtKey]
+      console.log crdtAtts
+      [coll._crdts._name, currentCrdt._id, crdtAtts]
+
+    set: (collection_name, id, attributes, syncCrdt = true) ->
+      if syncCrdt
+        crdtSet = @_synchronizeCrdt(collection_name, id, attributes)
+        if _.isArray(crdtSet)
+          [crdtColl, crdtId, crdtAtts] = crdtSet
+          super crdtColl, crdtId, crdtAtts
       super collection_name, id, attributes
+
+    unset: (collection_name, id, attributes) ->
+      crdtSet = @_synchronizeCrdt(collection_name, id, attributes)
+      if _.isArray(crdtSet)
+        [crdtColl, crdtId, crdtAtts] = crdtSet
+        @set crdtColl, crdtId, crdtAtts, false
+      super collection_name, id, attributes
+
