@@ -33,7 +33,8 @@ This is achieved with a technology that is equivalent to
 "[Operational Transformation](https://en.wikipedia.org/wiki/Operational_transformation)" (OT), called
 "[Commutative Replicated Data Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
 The net effect is that concurrent updates from different clients to the same collection object will not
-overwrite each other but will be merged intelligently.
+overwrite each other but will be merged intelligently. We currently merge objects at the field level.
+This means that in-field changes (e.g. concurrent insertions into the same text field) can not yet be tracked.
 
 Versioning is already built into the functionality of the package and can be used in principle. We just do
 not yet provide a high-level API to retrieve specific versions of a collection or an object. Every
@@ -434,8 +435,8 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
-Known Limitations
------------------
+Known Limitations / Todos
+-------------------------
 
 * Security (allow/deny) does not work for versioned collections.
 * The current mutator API is too low-level. We should implement the full
@@ -443,11 +444,9 @@ Known Limitations
   discover type by convention).
 * We should provide a high-level versioning API.
 * We should have a test suite.
-* If you publish a versioned collection under a different name to the
-  client (by manually publishing documents from it under a different
-  collection name) then you won't be able to change that collection from
-  the client directly. You'll have to change the original collection
-  and wait for the changes to propagate.
+* We should implement a versioned text type so that we can track
+  and merge in-field changes for strings. This requires implementation
+  of a treedoc balancing / treedoc OT protocol.
 
 
 Package Dependencies
