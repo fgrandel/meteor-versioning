@@ -439,13 +439,15 @@ Known Limitations
 
 * Security (allow/deny) does not work for versioned collections.
 * The current mutator API is too low-level. We should implement the full
-  MiniMongo API.
+  MiniMongo API. We also should simplify property configuration (e.g.
+  discover type by convention).
+* We should provide a high-level versioning API.
+* We should have a test suite.
 * If you publish a versioned collection under a different name to the
   client (by manually publishing documents from it under a different
   collection name) then you won't be able to change that collection from
   the client directly. You'll have to change the original collection
   and wait for the changes to propagate.
-* We should provide a high-level versioning API.
 
 
 Package Dependencies
@@ -469,3 +471,5 @@ Contributions
 -------------
 
 Contributions are welcome! Just make a pull request and I'll definitely check it out.
+
+If you don't know what to work on: Have a look at the "Known Limitations" above.

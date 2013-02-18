@@ -237,7 +237,6 @@
           return crdtId;
         },
         insertProperty: function(crdtId, args, clock, site) {
-          debugger;
           var changedProps, crdt, index, position;
           console.assert(_this._txRunning(), 'Trying to execute operation "insertProperty" outside a transaction.');
           crdt = _this._getCrdt(crdtId);

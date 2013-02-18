@@ -221,7 +221,6 @@ class Meteor.Collection extends OriginalCollection
       # args:
       #   key, value: the key/value pair to change
       insertProperty: (crdtId, args, clock, site) =>
-        debugger
         # Check preconditions
         console.assert @_txRunning(),
           'Trying to execute operation "insertProperty" outside a transaction.'
