@@ -142,6 +142,9 @@
         try {
           coll = this._collections[op.collection];
           console.assert(coll != null);
+          if (Meteor.isClient) {
+            coll._collection.pauseObservers();
+          }
           if (!txColls[coll._name]) {
             txColls[coll._name] = coll;
             coll._txStart();
@@ -161,6 +164,9 @@
       for (name in txColls) {
         coll = txColls[name];
         coll._txCommit();
+        if (Meteor.isClient) {
+          coll._collection.resumeObservers();
+        }
       }
       return true;
     };

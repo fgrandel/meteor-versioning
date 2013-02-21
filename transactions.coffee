@@ -138,6 +138,10 @@ class Meteor._TransactionsManager
         coll = @_collections[op.collection]
         console.assert coll?
 
+        # Pause observers while we execute the transaction
+        # to avoid inconsistent state being propagated.
+        if Meteor.isClient then coll._collection.pauseObservers()
+
         # Start the transaction in the collection if necessary.
         if not txColls[coll._name]
           txColls[coll._name] = coll
@@ -171,6 +175,7 @@ class Meteor._TransactionsManager
     # Commit the transaction.
     for name, coll of txColls
       coll._txCommit()
+      if Meteor.isClient then coll._collection.resumeObservers()
     true
 
   # Execute the transaction (or queue it if it arrived out of order).
