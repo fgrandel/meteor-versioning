@@ -17,7 +17,7 @@ class Meteor._TransactionsManager
     if Meteor.isServer
       @_localSite = 'server'
     else
-      @_localSite = 'client-' + Meteor.uuid()
+      @_localSite = 'client-' + Random.id()
 
     # On the server: Create the transactions log.
     if Meteor.isServer

@@ -18,7 +18,7 @@
       if (Meteor.isServer) {
         this._localSite = 'server';
       } else {
-        this._localSite = 'client-' + Meteor.uuid();
+        this._localSite = 'client-' + Random.id();
       }
       if (Meteor.isServer) {
         transactions = new Meteor.Collection('transactions');

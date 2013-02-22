@@ -1,6 +1,8 @@
 # Patch the original collection to support versioning.
 OriginalCollection = Meteor.Collection
 class Meteor.Collection extends OriginalCollection
+  _versioned: false
+
   constructor: (name, options = {}) ->
     super name, options
 
@@ -9,6 +11,7 @@ class Meteor.Collection extends OriginalCollection
     return @ unless @_versioned
 
     # If this is a versioned collection then add our own magic...
+    @_defineOperations()
 
     # Create the non-public CRDT version of managed collections.
     @_crdts = new OriginalCollection "_#{name}Crdts",
@@ -28,134 +31,121 @@ class Meteor.Collection extends OriginalCollection
     @_tx = Meteor.tx
     @_tx._addCollection @
 
-    ##################
-    # Public Methods #
-    ##################
-    # Insert our own mutators. We don't do this in the
-    # prototype to avoid polluting the normal collection
-    # implementation.
-    @insertOne = (object) ->
-      if object._id?
-        id = object._id
-        delete object._id
-      else
-        id = Meteor.uuid()
-      @_tx._addOperation
-        op: 'insertObject'
-        collection: @_name
-        crdtId: id
-        args:
-          object: object
-      id
+  ##################
+  # Public Methods #
+  ##################
+  # Insert our own mutators.
+  insertOne: (object) ->
+    if object._id?
+      id = object._id
+      delete object._id
+    else
+      id = @_makeNewID()
+    @_tx._addOperation
+      op: 'insertObject'
+      collection: @_name
+      crdtId: id
+      args:
+        object: object
+    id
 
-    @removeOne = (id) ->
-      @_tx._addOperation
-        op: 'removeObject'
-        collection: @_name
-        crdtId: id
-      id
+  removeOne: (id) ->
+    @_tx._addOperation
+      op: 'removeObject'
+      collection: @_name
+      crdtId: id
+    id
 
-    @setProperty = (id, key, value) ->
-      @_tx._addOperation
-        op: 'insertProperty'
-        collection: @_name
-        crdtId: id
-        args:
-          key: key
-          value: value
-      id
+  setProperty: (id, key, value) ->
+    @_tx._addOperation
+      op: 'insertProperty'
+      collection: @_name
+      crdtId: id
+      args:
+        key: key
+        value: value
+    id
 
-    @unsetProperty = (id, key, locator = null) ->
-      args = key: key
-      if locator? then args.locator = locator
-      @_tx._addOperation
-        op: 'removeProperty'
-        collection: @_name
-        crdtId: id
-        args: args
-      id
+  unsetProperty: (id, key, locator = null) ->
+    args = key: key
+    if locator? then args.locator = locator
+    @_tx._addOperation
+      op: 'removeProperty'
+      collection: @_name
+      crdtId: id
+      args: args
+    id
 
-    # The server may reset the collections.
-    if Meteor.isServer
-      @reset = ->
-        @_remove {}
-        @_crdts.remove {}
-        true
+  #######################
+  # Transaction Support #
+  #######################
+  _getCrdt: (crdtId) ->
+    serializedCrdt = @_crdts.findOne _crdtId: crdtId
+    if serializedCrdt?
+      new Meteor._CrdtDocument @_propSpec, serializedCrdt
+    else
+      undefined
 
-    #######################
-    # Transaction Support #
-    #######################
-    @_getCrdt = (crdtId) ->
-      serializedCrdt = @_crdts.findOne _crdtId: crdtId
-      if serializedCrdt?
-        new Meteor._CrdtDocument @_propSpec, serializedCrdt
-      else
-        undefined
+  # Allocate transaction-specific indexes per CRDT and
+  # property.
+  _getCurrentIndex: (crdt, key) ->
+    idxs = Meteor._ensure @_propertyIdxs, crdt.id
+    idxs[key] = crdt.getNextIndex key unless idxs[key]?
+    idxs[key]
 
-    # Allocate transaction-specific indexes per CRDT and
-    # property.
+  _txRunning: -> @_updatedCrdts?
+
+  _txStart: ->
+    console.assert not @_txRunning(),
+      'Trying to start an already running transaction.'
+    @_updatedCrdts = []
+
+    # Make sure that we allocate new property indexes
+    # for this transaction.
     @_propertyIdxs = {}
-    @_getCurrentIndex = (crdt, key) ->
-      @_propertyIdxs[crdt.id] = {} unless @_propertyIdxs[crdt.id]?
-      unless @_propertyIdxs[crdt.id][key]?
-        @_propertyIdxs[crdt.id][key] = crdt.getNextIndex key
-      @_propertyIdxs[crdt.id][key]
+    true
 
+  _txCommit: ->
+    console.assert @_txRunning(),
+      'Trying to commit a non-existent transaction.'
+    for mongoId in @_updatedCrdts
+      # Find the updated CRDT.
+      serializedCrdt = @_crdts.findOne _id: mongoId
+      console.assert serializedCrdt?
+      crdt = new Meteor._CrdtDocument @_propSpec, serializedCrdt
+      crdtId = crdt.crdtId
 
+      # Make a new snapshot of the updated CRDT.
+      newSnapshot = crdt.snapshot()
+
+      # Find the previous snapshot in the snapshot collection.
+      oldSnapshot = @findOne _id: crdtId
+      # Addition: If a previous snapshot does not exist then add a new one.
+      if newSnapshot? and not oldSnapshot?
+        @_insert newSnapshot
+
+      # Update: If a previous snapshot exists then update.
+      if newSnapshot? and oldSnapshot?
+        @_update {_id: crdtId}, newSnapshot
+
+      # Delete: If the new snapshot is 'null' then delete.
+      if oldSnapshot? and not newSnapshot?
+        @_remove _id: crdtId
+    @_updatedCrdts = undefined
+    true
+
+  _txAbort: ->
     @_updatedCrdts = undefined
 
-    @_txRunning = -> @_updatedCrdts?
 
-    @_txStart = ->
-      console.assert not @_txRunning(),
-        'Trying to start an already running transaction.'
-      @_updatedCrdts = []
-
-      # Make sure that we allocate new property indexes
-      # for this transaction.
-      @_propertyIdxs = {}
-      true
-
-    @_txCommit = ->
-      console.assert @_txRunning(),
-        'Trying to commit a non-existent transaction.'
-      for mongoId in @_updatedCrdts
-        # Find the updated CRDT.
-        serializedCrdt = @_crdts.findOne _id: mongoId
-        console.assert serializedCrdt?
-        crdt = new Meteor._CrdtDocument @_propSpec, serializedCrdt
-        crdtId = crdt.crdtId
-
-        # Make a new snapshot of the updated CRDT.
-        newSnapshot = crdt.snapshot()
-
-        # Find the previous snapshot in the snapshot collection.
-        oldSnapshot = @findOne _id: crdtId
-        # Addition: If a previous snapshot does not exist then add a new one.
-        if newSnapshot? and not oldSnapshot?
-          @_insert newSnapshot
-
-        # Update: If a previous snapshot exists then update.
-        if newSnapshot? and oldSnapshot?
-          @_update {_id: crdtId}, newSnapshot
-
-        # Delete: If the new snapshot is 'null' then delete.
-        if oldSnapshot? and not newSnapshot?
-          @_remove _id: crdtId
-      @_updatedCrdts = undefined
-      true
-
-    @_txAbort = ->
-      @_updatedCrdts = undefined
-
-
-    ##############
-    # Operations #
-    ##############
-    # Add an object to the collection.
-    # args:
-    #   object: the key/value pairs to create
+  ##############
+  # Operations #
+  ##############
+  _defineOperations: ->
     @_ops =
+      # Add an object to the collection.
+      # args:
+      #   object: the key/value pairs to create
       insertObject: (crdtId, args, clock, site) =>
         # Check preconditions.
         console.assert @_txRunning(),
@@ -385,14 +375,24 @@ class Meteor.Collection extends OriginalCollection
 
 
 if Meteor.isServer
+  # The server may reset the collections.
+  Meteor.Collection::reset = ->
+    @_remove {}
+    @_crdts.remove {}
+    true
+
   # Patch the live subscription to automatically publish the CRDT version
   # together with the snapshot version.
   OriginalLivedataSubscription = Meteor._LivedataSubscription
   class Meteor._LivedataSubscription extends OriginalLivedataSubscription
-    _synchronizeCrdt: (collection_name, id, attributes) ->
+    # Additionally to documents we keep a snapshot of already
+    # published fields.
+    _crdtFields: {}
+
+    _synchronizeCrdt: (collectionName, id, fields = {}) ->
       # If the collection is versioned then publish not only
       # the snapshot value but also its crresponding crdt.
-      coll = Meteor.tx._getCollection(collection_name)
+      coll = Meteor.tx._getCollection(collectionName)
       return unless coll?
       currentCrdt = (coll._crdts.findOne _crdtId: id) ? {}
       unless currentCrdt?
@@ -403,32 +403,54 @@ if Meteor.isServer
       # 1) Internal keys
       internalKeys = ['_id', '_crdtId', '_clock', '_deleted']
       # 2) Keys that that changed.
-      changedKeys = _.keys attributes
+      changedKeys = _.keys fields
       # 3) Keys that have been published previously.
       # NB: We never remove previously published CRDT keys from the
       # client, otherwise local undo simulation does not work. This
       # is part of our insert-only CRDT policy.
-      oldCrdt = (@snapshot[coll._crdts._name]?[currentCrdt._id]) ? {}
-      publishedKeys = _.keys oldCrdt
+      strId = @_idFilter.idStringify(currentCrdt._id)
+      crdtSnapshot = Meteor._ensure @_crdtFields, collectionName, strId
+      updateCrdt = crdtSnapshot._id?
+      publishedKeys = _.keys crdtSnapshot
+      # Collect all fields in this CRDT that should be published.
       crdtKeys = _.union internalKeys, changedKeys, publishedKeys
-      crdtAtts = {}
+      crdtFields = {}
       for crdtKey in crdtKeys
-        unless _.isEqual(currentCrdt[crdtKey], oldCrdt[crdtKey])
-          crdtAtts[crdtKey] = currentCrdt[crdtKey]
-      [coll._crdts._name, currentCrdt._id, crdtAtts]
+        # Only send changed values over the wire.
+        unless _.isEqual(currentCrdt[crdtKey], crdtSnapshot[crdtKey])
+          crdtFields[crdtKey] = currentCrdt[crdtKey]
+          # Remember published keys.
+          crdtSnapshot[crdtKey] = currentCrdt[crdtKey]
+      [coll._crdts._name, currentCrdt._id, crdtFields, updateCrdt]
 
-    set: (collection_name, id, attributes, syncCrdt = true) ->
+    added: (collectionName, id, fields) ->
+      crdtSync = @_synchronizeCrdt(collectionName, id, fields)
+      if _.isArray(crdtSync)
+        [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
+        if updateCrdt
+          @changed crdtColl, crdtId, crdtFields, false
+        else
+          super crdtColl, crdtId, crdtFields
+      super collectionName, id, fields
+
+    changed: (collectionName, id, fields, syncCrdt = true) ->
+      # There's no nice way in coffeescript to access the
+      # superclass implementation, yet.
+      # See https://github.com/jashkenas/coffee-script/issues/1606
+      # So let's work around this for now.
       if syncCrdt
-        crdtSet = @_synchronizeCrdt(collection_name, id, attributes)
-        if _.isArray(crdtSet)
-          [crdtColl, crdtId, crdtAtts] = crdtSet
-          super crdtColl, crdtId, crdtAtts
-      super collection_name, id, attributes
+        crdtSync = @_synchronizeCrdt(collectionName, id, fields)
+        if _.isArray(crdtSync)
+          [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
+          console.assert updateCrdt, 'Trying to update a non-existent CRDT'
+          super crdtColl, crdtId, crdtFields
+      super collectionName, id, fields
 
-    unset: (collection_name, id, attributes) ->
-      crdtSet = @_synchronizeCrdt(collection_name, id, attributes)
-      if _.isArray(crdtSet)
-        [crdtColl, crdtId, crdtAtts] = crdtSet
-        @set crdtColl, crdtId, crdtAtts, false
-      super collection_name, id, attributes
+    removed: (collectionName, id) ->
+      crdtSync = @_synchronizeCrdt(collectionName, id)
+      if _.isArray(crdtSync)
+        [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
+        console.assert updateCrdt, 'Trying to delete a non-existent CRDT'
+        @changed crdtColl, crdtId, crdtFields, false
+      super collectionName, id
 

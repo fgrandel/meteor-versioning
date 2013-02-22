@@ -49,7 +49,9 @@ will help you to better understand the data format.
 Requirements
 ------------
 
-This package requires Meteor 0.5.5 or later.
+Meteor introduced compatibility breaking changes with it's version 0.5.7. Due to this:
+- Meteor 0.5.5 or 0.5.6: Use version 0.3.1 of this package. This version will no longer be developed.
+- Meteor 0.5.7 and onwards: Use the most recent version of this package.
 
 
 Installation
