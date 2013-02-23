@@ -209,6 +209,7 @@ class Meteor._CrdtDocument
   serialize: ->
     serializedCrdt = @properties
     _.extend serializedCrdt,
+      _id: @id
       _crdtId: @crdtId
       _clock: @clock
       _deleted: @deleted

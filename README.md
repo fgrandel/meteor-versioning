@@ -198,6 +198,10 @@ Publish/Subscribe
 `Meteor.publish()` and `Meteor.subscribe()` work normally with versioned
 collections.
 
+When you un-/resubscribe from/to a collection then your local undo/redo history
+will be purged as it would otherwise contain operations on objects that are
+no longer available.
+
 
 Security
 --------

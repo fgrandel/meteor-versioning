@@ -31,6 +31,14 @@ class Meteor.Collection extends OriginalCollection
     @_tx = Meteor.tx
     @_tx._addCollection @
 
+    # Whenever CRDTs are removed (i.e. when a subscription
+    # changes or is stopped) we have to purge the undo/redo
+    # stack as it will contain objects that are no longer
+    # available.
+    @_crdts.find().observe
+      removed: (old) -> Meteor.tx._purgeUndoRedo()
+
+
   ##################
   # Public Methods #
   ##################
@@ -47,6 +55,7 @@ class Meteor.Collection extends OriginalCollection
       crdtId: id
       args:
         object: object
+        id: @_makeNewID()
     id
 
   removeOne: (id) ->
@@ -146,6 +155,12 @@ class Meteor.Collection extends OriginalCollection
       # Add an object to the collection.
       # args:
       #   object: the key/value pairs to create
+      #   id: a unique ID for the internal CRDT object.
+      #       NB: This must be set when generating the
+      #       operation so that we get the same ID for
+      #       the client simulation and the server side.
+      #       Otherwise we'd get false removed/added events
+      #       on the client when the server returns.
       insertObject: (crdtId, args, clock, site) =>
         # Check preconditions.
         console.assert @_txRunning(),
@@ -160,12 +175,13 @@ class Meteor.Collection extends OriginalCollection
           # We are actually un-deleting an existing object (happens on redo).
           # Mark the object as 'undeleted' which will make it publicly
           # visible again.
-          @_crdts.update {_crdtId: crdtId},
+          @_crdts.update {_id: crdt.id},
             {$set: {_deleted: false, _clock: clock}}
           mongoId = crdt.id
         else
           # Create a new CRDT.
           crdt = new Meteor._CrdtDocument @_propSpec
+          crdt.id = args.id
           crdt.crdtId = crdtId
           crdt.clock = clock
           for key, value of args.object
@@ -175,7 +191,8 @@ class Meteor.Collection extends OriginalCollection
                 crdt.insertAtIndex key, entry, index, site
             else
               crdt.insertAtIndex key, value, index, site
-          mongoId = @_crdts.insert crdt.serialize()
+          serializedCrdt = crdt.serialize()
+          mongoId = @_crdts.insert serializedCrdt
 
         # Remember the inserted/undeleted CRDT for txCommit.
         @_updatedCrdts.push mongoId
@@ -200,7 +217,7 @@ class Meteor.Collection extends OriginalCollection
 
         # Mark the object as 'deleted' which will hide it from
         # the public collection.
-        @_crdts.update {_crdtId: crdtId},
+        @_crdts.update {_id: crdt.id},
           {$set: {_deleted: true, _clock: clock}}
 
         # Remember the changed CRDT for txCommit.
@@ -228,7 +245,7 @@ class Meteor.Collection extends OriginalCollection
         position = crdt.insertAtIndex args.key, args.value, index, site
         changedProps = _clock: clock
         changedProps[args.key] = crdt.serialize()[args.key]
-        @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
+        @_crdts.update {_id: crdt.id}, {$set: changedProps}
 
         # Remember the changed CRDT for txCommit.
         @_updatedCrdts.push crdt.id
@@ -263,7 +280,7 @@ class Meteor.Collection extends OriginalCollection
         deletedIndices = crdt.delete args.key, locator
         changedProps = _clock: clock
         changedProps[args.key] = crdt.serialize()[args.key]
-        @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
+        @_crdts.update {_id: crdt.id}, {$set: changedProps}
 
         # Remember the changed CRDT for txCommit.
         @_updatedCrdts.push crdt.id
@@ -303,7 +320,7 @@ class Meteor.Collection extends OriginalCollection
 
             # Mark the object as 'undeleted' which will make it
             # publicly visible again.
-            @_crdts.update {_crdtId: crdtId},
+            @_crdts.update {_id: crdt.id},
               {$set: {_deleted: false, _clock: clock}}
 
             # Remember the changed CRDT for txCommit.
@@ -333,7 +350,7 @@ class Meteor.Collection extends OriginalCollection
               origIndex, origSite, origChange
             changedProps = _clock: clock
             changedProps[origArgs.key] = crdt.serialize()[origArgs.key]
-            @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
+            @_crdts.update {_id: crdt.id}, {$set: changedProps}
 
             # Remember the changed CRDT for txCommit.
             @_updatedCrdts.push crdt.id
@@ -363,7 +380,7 @@ class Meteor.Collection extends OriginalCollection
                   origIndex, origSite, origChange
             changedProps = _clock: clock
             changedProps[origArgs.key] = crdt.serialize()[origArgs.key]
-            @_crdts.update {_crdtId: crdtId}, {$set: changedProps}
+            @_crdts.update {_id: crdt.id}, {$set: changedProps}
 
             # Remember the changed CRDT for txCommit.
             @_updatedCrdts.push crdt.id
@@ -377,21 +394,19 @@ class Meteor.Collection extends OriginalCollection
 if Meteor.isServer
   # The server may reset the collections.
   Meteor.Collection::reset = ->
-    @_remove {}
-    @_crdts.remove {}
+    @remove {}
+    if @_versioned then @_crdts.remove {}
     true
 
   # Patch the live subscription to automatically publish the CRDT version
   # together with the snapshot version.
   OriginalLivedataSubscription = Meteor._LivedataSubscription
   class Meteor._LivedataSubscription extends OriginalLivedataSubscription
-    # Additionally to documents we keep a snapshot of already
-    # published fields.
-    _crdtFields: {}
+    _removingAllDocs: false
 
     _synchronizeCrdt: (collectionName, id, fields = {}) ->
       # If the collection is versioned then publish not only
-      # the snapshot value but also its crresponding crdt.
+      # the snapshot value but also its corresponding CRDT.
       coll = Meteor.tx._getCollection(collectionName)
       return unless coll?
       currentCrdt = (coll._crdts.findOne _crdtId: id) ? {}
@@ -407,10 +422,15 @@ if Meteor.isServer
       # 3) Keys that have been published previously.
       # NB: We never remove previously published CRDT keys from the
       # client, otherwise local undo simulation does not work. This
-      # is part of our insert-only CRDT policy.
+      # is part of our insert-only CRDT policy. Probably we should
+      # implement some garbage collection method on the client which
+      # cleans up the CRDT collection when the undo stack is being
+      # emptied on the client.
       strId = @_idFilter.idStringify(currentCrdt._id)
-      crdtSnapshot = Meteor._ensure @_crdtFields, collectionName, strId
-      updateCrdt = crdtSnapshot._id?
+      collView = @_session.collectionViews[coll._crdts._name]
+      if collView? then docView = collView.documents[strId]
+      added = if docView then false else true
+      crdtSnapshot = if added then {} else docView.getFields()
       publishedKeys = _.keys crdtSnapshot
       # Collect all fields in this CRDT that should be published.
       crdtKeys = _.union internalKeys, changedKeys, publishedKeys
@@ -419,18 +439,16 @@ if Meteor.isServer
         # Only send changed values over the wire.
         unless _.isEqual(currentCrdt[crdtKey], crdtSnapshot[crdtKey])
           crdtFields[crdtKey] = currentCrdt[crdtKey]
-          # Remember published keys.
-          crdtSnapshot[crdtKey] = currentCrdt[crdtKey]
-      [coll._crdts._name, currentCrdt._id, crdtFields, updateCrdt]
+      [coll._crdts._name, currentCrdt._id, crdtFields, added]
 
     added: (collectionName, id, fields) ->
       crdtSync = @_synchronizeCrdt(collectionName, id, fields)
       if _.isArray(crdtSync)
-        [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
-        if updateCrdt
-          @changed crdtColl, crdtId, crdtFields, false
-        else
+        [crdtColl, crdtId, crdtFields, added] = crdtSync
+        if added
           super crdtColl, crdtId, crdtFields
+        else
+          @changed crdtColl, crdtId, crdtFields, false
       super collectionName, id, fields
 
     changed: (collectionName, id, fields, syncCrdt = true) ->
@@ -441,16 +459,26 @@ if Meteor.isServer
       if syncCrdt
         crdtSync = @_synchronizeCrdt(collectionName, id, fields)
         if _.isArray(crdtSync)
-          [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
-          console.assert updateCrdt, 'Trying to update a non-existent CRDT'
+          [crdtColl, crdtId, crdtFields, added] = crdtSync
+          console.assert not added, 'Trying to update a non-existent CRDT'
           super crdtColl, crdtId, crdtFields
       super collectionName, id, fields
 
     removed: (collectionName, id) ->
-      crdtSync = @_synchronizeCrdt(collectionName, id)
-      if _.isArray(crdtSync)
-        [crdtColl, crdtId, crdtFields, updateCrdt] = crdtSync
-        console.assert updateCrdt, 'Trying to delete a non-existent CRDT'
-        @changed crdtColl, crdtId, crdtFields, false
+      # CRDTs may not be removed as long as
+      # we subscribe to the corresponding snapshot.
+      isCrdtColl = /_\w+Crdts/.test(collectionName)
+      console.assert not isCrdtColl or @_removingAllDocs
+      unless @_removingAllDocs
+        crdtSync = @_synchronizeCrdt(collectionName, id)
+        if _.isArray(crdtSync)
+          [crdtColl, crdtId, crdtFields, added] = crdtSync
+          console.assert not added, 'Trying to delete a non-existent CRDT'
+          @changed crdtColl, crdtId, crdtFields, false
       super collectionName, id
 
+    _removeAllDocuments: ->
+      # This is called when the subscription ends. In this case we
+      # allow delete messages for CRDTs to reach the client.
+      @_removingAllDocs = true
+      super()

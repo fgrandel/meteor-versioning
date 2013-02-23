@@ -38,6 +38,10 @@ class Meteor._TransactionsManager
         # Execute the transaction.
         self._execute tx
 
+  _purgeUndoRedo: ->
+    @_undoStack = []
+    @_redoStack = []
+
   # Get the clock component corresponding to the given site.
   _getTick: (clock, site) ->
     clock[site] = 0 unless clock[site]?

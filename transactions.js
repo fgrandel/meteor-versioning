@@ -37,6 +37,11 @@
       });
     }
 
+    _TransactionsManager.prototype._purgeUndoRedo = function() {
+      this._undoStack = [];
+      return this._redoStack = [];
+    };
+
     _TransactionsManager.prototype._getTick = function(clock, site) {
       if (clock[site] == null) {
         clock[site] = 0;

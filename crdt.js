@@ -169,6 +169,7 @@
       var serializedCrdt;
       serializedCrdt = this.properties;
       _.extend(serializedCrdt, {
+        _id: this.id,
         _crdtId: this.crdtId,
         _clock: this.clock,
         _deleted: this.deleted

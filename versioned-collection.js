@@ -38,6 +38,11 @@
       });
       this._tx = Meteor.tx;
       this._tx._addCollection(this);
+      this._crdts.find().observe({
+        removed: function(old) {
+          return Meteor.tx._purgeUndoRedo();
+        }
+      });
     }
 
     Collection.prototype.insertOne = function(object) {
@@ -53,7 +58,8 @@
         collection: this._name,
         crdtId: id,
         args: {
-          object: object
+          object: object,
+          id: this._makeNewID()
         }
       });
       return id;
@@ -175,7 +181,7 @@
       var _this = this;
       return this._ops = {
         insertObject: function(crdtId, args, clock, site) {
-          var crdt, entry, index, key, mongoId, value, _i, _len, _ref;
+          var crdt, entry, index, key, mongoId, serializedCrdt, value, _i, _len, _ref;
           console.assert(_this._txRunning(), 'Trying to execute operation "insertObject" outside a transaction.');
           crdt = _this._getCrdt(crdtId);
           if (crdt != null) {
@@ -186,7 +192,7 @@
               });
             }
             _this._crdts.update({
-              _crdtId: crdtId
+              _id: crdt.id
             }, {
               $set: {
                 _deleted: false,
@@ -196,6 +202,7 @@
             mongoId = crdt.id;
           } else {
             crdt = new Meteor._CrdtDocument(_this._propSpec);
+            crdt.id = args.id;
             crdt.crdtId = crdtId;
             crdt.clock = clock;
             _ref = args.object;
@@ -211,7 +218,8 @@
                 crdt.insertAtIndex(key, value, index, site);
               }
             }
-            mongoId = _this._crdts.insert(crdt.serialize());
+            serializedCrdt = crdt.serialize();
+            mongoId = _this._crdts.insert(serializedCrdt);
           }
           _this._updatedCrdts.push(mongoId);
           return crdtId;
@@ -233,7 +241,7 @@
             });
           }
           _this._crdts.update({
-            _crdtId: crdtId
+            _id: crdt.id
           }, {
             $set: {
               _deleted: true,
@@ -261,7 +269,7 @@
           };
           changedProps[args.key] = crdt.serialize()[args.key];
           _this._crdts.update({
-            _crdtId: crdtId
+            _id: crdt.id
           }, {
             $set: changedProps
           });
@@ -290,7 +298,7 @@
           };
           changedProps[args.key] = crdt.serialize()[args.key];
           _this._crdts.update({
-            _crdtId: crdtId
+            _id: crdt.id
           }, {
             $set: changedProps
           });
@@ -319,7 +327,7 @@
                 });
               }
               _this._crdts.update({
-                _crdtId: crdtId
+                _id: crdt.id
               }, {
                 $set: {
                   _deleted: false,
@@ -346,7 +354,7 @@
               };
               changedProps[origArgs.key] = crdt.serialize()[origArgs.key];
               _this._crdts.update({
-                _crdtId: crdtId
+                _id: crdt.id
               }, {
                 $set: changedProps
               });
@@ -377,7 +385,7 @@
               };
               changedProps[origArgs.key] = crdt.serialize()[origArgs.key];
               _this._crdts.update({
-                _crdtId: crdtId
+                _id: crdt.id
               }, {
                 $set: changedProps
               });
@@ -398,8 +406,10 @@
 
   if (Meteor.isServer) {
     Meteor.Collection.prototype.reset = function() {
-      this._remove({});
-      this._crdts.remove({});
+      this.remove({});
+      if (this._versioned) {
+        this._crdts.remove({});
+      }
       return true;
     };
     OriginalLivedataSubscription = Meteor._LivedataSubscription;
@@ -411,10 +421,10 @@
         return _LivedataSubscription.__super__.constructor.apply(this, arguments);
       }
 
-      _LivedataSubscription.prototype._crdtFields = {};
+      _LivedataSubscription.prototype._removingAllDocs = false;
 
       _LivedataSubscription.prototype._synchronizeCrdt = function(collectionName, id, fields) {
-        var changedKeys, coll, crdtFields, crdtKey, crdtKeys, crdtSnapshot, currentCrdt, internalKeys, publishedKeys, strId, updateCrdt, _i, _len, _ref;
+        var added, changedKeys, coll, collView, crdtFields, crdtKey, crdtKeys, crdtSnapshot, currentCrdt, docView, internalKeys, publishedKeys, strId, _i, _len, _ref;
         if (fields == null) {
           fields = {};
         }
@@ -432,8 +442,12 @@
         internalKeys = ['_id', '_crdtId', '_clock', '_deleted'];
         changedKeys = _.keys(fields);
         strId = this._idFilter.idStringify(currentCrdt._id);
-        crdtSnapshot = Meteor._ensure(this._crdtFields, collectionName, strId);
-        updateCrdt = crdtSnapshot._id != null;
+        collView = this._session.collectionViews[coll._crdts._name];
+        if (collView != null) {
+          docView = collView.documents[strId];
+        }
+        added = docView ? false : true;
+        crdtSnapshot = added ? {} : docView.getFields();
         publishedKeys = _.keys(crdtSnapshot);
         crdtKeys = _.union(internalKeys, changedKeys, publishedKeys);
         crdtFields = {};
@@ -441,36 +455,35 @@
           crdtKey = crdtKeys[_i];
           if (!_.isEqual(currentCrdt[crdtKey], crdtSnapshot[crdtKey])) {
             crdtFields[crdtKey] = currentCrdt[crdtKey];
-            crdtSnapshot[crdtKey] = currentCrdt[crdtKey];
           }
         }
-        return [coll._crdts._name, currentCrdt._id, crdtFields, updateCrdt];
+        return [coll._crdts._name, currentCrdt._id, crdtFields, added];
       };
 
       _LivedataSubscription.prototype.added = function(collectionName, id, fields) {
-        var crdtColl, crdtFields, crdtId, crdtSync, updateCrdt;
+        var added, crdtColl, crdtFields, crdtId, crdtSync;
         crdtSync = this._synchronizeCrdt(collectionName, id, fields);
         if (_.isArray(crdtSync)) {
-          crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], updateCrdt = crdtSync[3];
-          if (updateCrdt) {
-            this.changed(crdtColl, crdtId, crdtFields, false);
-          } else {
+          crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], added = crdtSync[3];
+          if (added) {
             _LivedataSubscription.__super__.added.call(this, crdtColl, crdtId, crdtFields);
+          } else {
+            this.changed(crdtColl, crdtId, crdtFields, false);
           }
         }
         return _LivedataSubscription.__super__.added.call(this, collectionName, id, fields);
       };
 
       _LivedataSubscription.prototype.changed = function(collectionName, id, fields, syncCrdt) {
-        var crdtColl, crdtFields, crdtId, crdtSync, updateCrdt;
+        var added, crdtColl, crdtFields, crdtId, crdtSync;
         if (syncCrdt == null) {
           syncCrdt = true;
         }
         if (syncCrdt) {
           crdtSync = this._synchronizeCrdt(collectionName, id, fields);
           if (_.isArray(crdtSync)) {
-            crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], updateCrdt = crdtSync[3];
-            console.assert(updateCrdt, 'Trying to update a non-existent CRDT');
+            crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], added = crdtSync[3];
+            console.assert(!added, 'Trying to update a non-existent CRDT');
             _LivedataSubscription.__super__.changed.call(this, crdtColl, crdtId, crdtFields);
           }
         }
@@ -478,14 +491,23 @@
       };
 
       _LivedataSubscription.prototype.removed = function(collectionName, id) {
-        var crdtColl, crdtFields, crdtId, crdtSync, updateCrdt;
-        crdtSync = this._synchronizeCrdt(collectionName, id);
-        if (_.isArray(crdtSync)) {
-          crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], updateCrdt = crdtSync[3];
-          console.assert(updateCrdt, 'Trying to delete a non-existent CRDT');
-          this.changed(crdtColl, crdtId, crdtFields, false);
+        var added, crdtColl, crdtFields, crdtId, crdtSync, isCrdtColl;
+        isCrdtColl = /_\w+Crdts/.test(collectionName);
+        console.assert(!isCrdtColl || this._removingAllDocs);
+        if (!this._removingAllDocs) {
+          crdtSync = this._synchronizeCrdt(collectionName, id);
+          if (_.isArray(crdtSync)) {
+            crdtColl = crdtSync[0], crdtId = crdtSync[1], crdtFields = crdtSync[2], added = crdtSync[3];
+            console.assert(!added, 'Trying to delete a non-existent CRDT');
+            this.changed(crdtColl, crdtId, crdtFields, false);
+          }
         }
         return _LivedataSubscription.__super__.removed.call(this, collectionName, id);
+      };
+
+      _LivedataSubscription.prototype._removeAllDocuments = function() {
+        this._removingAllDocs = true;
+        return _LivedataSubscription.__super__._removeAllDocuments.call(this);
       };
 
       return _LivedataSubscription;
