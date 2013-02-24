@@ -429,16 +429,14 @@ if Meteor.isServer
       strId = @_idFilter.idStringify(currentCrdt._id)
       collView = @_session.collectionViews[coll._crdts._name]
       if collView? then docView = collView.documents[strId]
-      added = if docView then false else true
+      added = not @_documents[coll._crdts._name]?[strId]?
       crdtSnapshot = if added then {} else docView.getFields()
       publishedKeys = _.keys crdtSnapshot
       # Collect all fields in this CRDT that should be published.
       crdtKeys = _.union internalKeys, changedKeys, publishedKeys
       crdtFields = {}
       for crdtKey in crdtKeys
-        # Only send changed values over the wire.
-        unless _.isEqual(currentCrdt[crdtKey], crdtSnapshot[crdtKey])
-          crdtFields[crdtKey] = currentCrdt[crdtKey]
+        crdtFields[crdtKey] = currentCrdt[crdtKey] if currentCrdt[crdtKey]?
       [coll._crdts._name, currentCrdt._id, crdtFields, added]
 
     added: (collectionName, id, fields) ->
@@ -465,17 +463,10 @@ if Meteor.isServer
       super collectionName, id, fields
 
     removed: (collectionName, id) ->
+      # CRDTs may not be removed as long as
+      # we subscribe to the corresponding snapshot.
       isCrdtColl = /_\w+Crdts/.test(collectionName)
       console.assert not isCrdtColl or @_removingAllDocs
-      if isCrdtColl
-        # CRDTs may not be removed as long as
-        # we subscribe to the corresponding snapshot.
-        strId = @_idFilter.idStringify(id)
-        crdt = @_session.collectionViews[collectionName]
-          .documents[strId].getFields()
-        snapshotId = @_idFilter.idStringify(crdt._crdtId)
-        snapshotCollName = collectionName.replace /^_(\w+)Crdts/, '$1'
-        if @_documents[snapshotCollName][snapshotId]? then return
       unless @_removingAllDocs
         crdtSync = @_synchronizeCrdt(collectionName, id)
         if _.isArray(crdtSync)

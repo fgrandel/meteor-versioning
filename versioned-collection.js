@@ -424,7 +424,7 @@
       _LivedataSubscription.prototype._removingAllDocs = false;
 
       _LivedataSubscription.prototype._synchronizeCrdt = function(collectionName, id, fields) {
-        var added, changedKeys, coll, collView, crdtFields, crdtKey, crdtKeys, crdtSnapshot, currentCrdt, docView, internalKeys, publishedKeys, strId, _i, _len, _ref;
+        var added, changedKeys, coll, collView, crdtFields, crdtKey, crdtKeys, crdtSnapshot, currentCrdt, docView, internalKeys, publishedKeys, strId, _i, _len, _ref, _ref1;
         if (fields == null) {
           fields = {};
         }
@@ -446,14 +446,14 @@
         if (collView != null) {
           docView = collView.documents[strId];
         }
-        added = docView ? false : true;
+        added = !(((_ref1 = this._documents[coll._crdts._name]) != null ? _ref1[strId] : void 0) != null);
         crdtSnapshot = added ? {} : docView.getFields();
         publishedKeys = _.keys(crdtSnapshot);
         crdtKeys = _.union(internalKeys, changedKeys, publishedKeys);
         crdtFields = {};
         for (_i = 0, _len = crdtKeys.length; _i < _len; _i++) {
           crdtKey = crdtKeys[_i];
-          if (!_.isEqual(currentCrdt[crdtKey], crdtSnapshot[crdtKey])) {
+          if (currentCrdt[crdtKey] != null) {
             crdtFields[crdtKey] = currentCrdt[crdtKey];
           }
         }
@@ -491,18 +491,9 @@
       };
 
       _LivedataSubscription.prototype.removed = function(collectionName, id) {
-        var added, crdt, crdtColl, crdtFields, crdtId, crdtSync, isCrdtColl, snapshotCollName, snapshotId, strId;
+        var added, crdtColl, crdtFields, crdtId, crdtSync, isCrdtColl;
         isCrdtColl = /_\w+Crdts/.test(collectionName);
         console.assert(!isCrdtColl || this._removingAllDocs);
-        if (isCrdtColl) {
-          strId = this._idFilter.idStringify(id);
-          crdt = this._session.collectionViews[collectionName].documents[strId].getFields();
-          snapshotId = this._idFilter.idStringify(crdt._crdtId);
-          snapshotCollName = collectionName.replace(/^_(\w+)Crdts/, '$1');
-          if (this._documents[snapshotCollName][snapshotId] != null) {
-            return;
-          }
-        }
         if (!this._removingAllDocs) {
           crdtSync = this._synchronizeCrdt(collectionName, id);
           if (_.isArray(crdtSync)) {
