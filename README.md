@@ -434,6 +434,8 @@ give you an empty collection without any undo/redo/versioning information.
 
 Only do this if you really want to start over.
 
+NB: This method is only available on the server.
+
 
 #### Meteor.Collection.find()/findOne()
 

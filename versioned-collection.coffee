@@ -465,10 +465,17 @@ if Meteor.isServer
       super collectionName, id, fields
 
     removed: (collectionName, id) ->
-      # CRDTs may not be removed as long as
-      # we subscribe to the corresponding snapshot.
       isCrdtColl = /_\w+Crdts/.test(collectionName)
       console.assert not isCrdtColl or @_removingAllDocs
+      if isCrdtColl
+        # CRDTs may not be removed as long as
+        # we subscribe to the corresponding snapshot.
+        strId = @_idFilter.idStringify(id)
+        crdt = @_session.collectionViews[collectionName]
+          .documents[strId].getFields()
+        snapshotId = @_idFilter.idStringify(crdt._crdtId)
+        snapshotCollName = collectionName.replace /^_(\w+)Crdts/, '$1'
+        if @_documents[snapshotCollName][snapshotId]? then return
       unless @_removingAllDocs
         crdtSync = @_synchronizeCrdt(collectionName, id)
         if _.isArray(crdtSync)

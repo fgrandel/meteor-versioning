@@ -491,9 +491,18 @@
       };
 
       _LivedataSubscription.prototype.removed = function(collectionName, id) {
-        var added, crdtColl, crdtFields, crdtId, crdtSync, isCrdtColl;
+        var added, crdt, crdtColl, crdtFields, crdtId, crdtSync, isCrdtColl, snapshotCollName, snapshotId, strId;
         isCrdtColl = /_\w+Crdts/.test(collectionName);
         console.assert(!isCrdtColl || this._removingAllDocs);
+        if (isCrdtColl) {
+          strId = this._idFilter.idStringify(id);
+          crdt = this._session.collectionViews[collectionName].documents[strId].getFields();
+          snapshotId = this._idFilter.idStringify(crdt._crdtId);
+          snapshotCollName = collectionName.replace(/^_(\w+)Crdts/, '$1');
+          if (this._documents[snapshotCollName][snapshotId] != null) {
+            return;
+          }
+        }
         if (!this._removingAllDocs) {
           crdtSync = this._synchronizeCrdt(collectionName, id);
           if (_.isArray(crdtSync)) {
