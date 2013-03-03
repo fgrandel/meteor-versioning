@@ -517,6 +517,69 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
+Resource Usage
+--------------
+
+It won't come as a surprise that versioned collections consume considerably
+more resources both, on the client and on the server, than a non-versioned collection.
+
+That being said I personally never found versioning to be a space or performance
+bottleneck. Reactively updating the DOM in real time (e.g. via Meteor's spark)
+is so much slower than keeping versioned objects that I never perceived a difference.
+I therefore stick to Donald Knuth's recommendation to avoid premature optimization
+when it increases complexity.
+
+If you perceive performance degradation due to object versioning let me know
+and I'll try to help you find out where it comes from.
+
+
+
+__Space:__
+
+A versioned object needs to be mirrored in a separate collection with its full version
+history for all fields plus considerable administrative information necessary to track
+the causality of concurrent updates as well as all data necessary for undo and redo.
+Have a look at the '_[your collection name]Crdt' collections in the Mongo DB for details.
+
+You also have to be aware that space is even consumed when you delete an object.
+Otherwise prior versions could not be recovered.
+
+In practice this is usually not a big problem as disk space is cheap and objects will
+only be loaded into RAM when actually being used (i.e. in a query or observer).
+
+On the server side: The same rules apply as to normal Meteor collections with the
+exception of deleted objects: While the snapshot version (latest version) will be
+removed from RAM, the version mirror will be kept in RAM as long as it is part of
+a published collection. This is necessary to enable undo on the server.
+
+On the client side: Space requirements on the client are considerably optimized.
+We only copy version information to the client for objects that are actually being
+published to the client.
+
+When you re-subscribe to a different selection of client objects then the RAM necessary
+to hold prior versioned objects will also be released. This explains why re-subscribing
+to a collection will invalidate the undo/redo history: You loose version history locally
+when you subscribe to a different partition of the collection. The full version history
+is nonetheless kept on disk, of course.
+
+
+__Time:__
+
+Updating versioned objects is considerably slower than updating non-versioned objects.
+
+This is mainly due to the following additional processing steps:
+ 1. The transaction framework has a slight overhead over usual updates by
+    handling abstract operations.
+ 2. Updating the internal representation of a versioned collections is considerably
+    more complex than updating a non-versioned collection. We have to update both,
+    the object snapshot as well as the versioned object mirror.
+ 3. Taking a snapshot from the versioned mirror consumes quite a few processor cycles
+    and must be done whenever an object changes.
+ 4. Replicating versioned objects accross clients takes longer as more data
+    needs to be transferred to the client. This is not a problem in practice
+    as latency compensation comes up for this.
+
+
 Bugs
 ----
 
