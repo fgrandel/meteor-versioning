@@ -54,7 +54,7 @@ I'll list the most important pros and cons right here:
 
 <table>
   <tr>
-    <th>Pros</th><th>Cons</th>
+    <th>Features</th><th>Limitations</th>
   </tr>
   <tr>
     <td>Infinite undo/redo</td><td>No direct access to versions yet</td>
@@ -78,10 +78,9 @@ next six months. On the other hand I have no need for a versioned string so far.
 remove limitations?
 
 1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer
-documentation](HACKING.md).
-developer documentation. I'll help you with all my knowledge and ideas if you are interested in working as a team.
-2. I can provide exactly what YOU need when you contract me. If you donate then please write a comment or contact me
-by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
+documentation](HACKING.md). I'll help you with all my knowledge and ideas if you are interested in working as a team.
+2. I can provide exactly what YOU need when you contract me. If you donate then please accompany your donation with
+a comment or contact me by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
 
 <a href='http://www.pledgie.com/campaigns/19414'>
   <img alt='Click here to support Meteor versioning and make a donation at www.pledgie.com!'
@@ -129,12 +128,15 @@ tx.commit();
 // 2nd transaction: update the object.
 Todos.setProperty(todoId, 'details', 'Doesn\'t seem to be difficult...');
 tx.commit();
+console.log(Todos.findOne()); // The content of the 'details' field is "Doesn't seem to be...".
 
 // Undo the 2nd transaction.
-tx.undo(); // The content of the 'details' field is now "Learn the...".
+tx.undo();
+console.log(Todos.findOne()); // The 'details' field is now: "Learn the meteor-versioning package...".
 
 // Redo the 2nd transaction.
-tx.redo(); // The content of the 'details' field is "Doesn't seem to be..." again.
+tx.redo();
+console.log(Todos.findOne()); // The content of the 'details' field is "Doesn't seem to be..." again.
 ```
 
 
