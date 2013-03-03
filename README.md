@@ -2,8 +2,11 @@ Undo/Redo, Versioning, Operational Transformation and Transactions for Meteor Co
 =========================================================================================
 
 
-What does this package do?
---------------------------
+What does this package do and what not (yet)?
+---------------------------------------------
+
+If you want to get your hands dirty immediately then move on to the [Installation](#installation) and
+[Usage](#usage) sections.
 
 This package provides four additional and closely related features to Meteor:
 
@@ -45,6 +48,46 @@ already have a look at it and try to figure out how versioning is being implemen
 at [this inline comment](https://github.com/jerico-dev/meteor-versioning/blob/master/crdt.coffee#L39) which
 will help you to better understand the data format.
 
+While these are certainly important features there are also still a few important limitations to the package
+that may be relevant to you. We have a full "Todo and Known Limitations" section below. For your convenience
+I'll list the most important pros and cons right here:
+
+<table>
+  <tr>
+    <th>Pros</th><th>Cons</th>
+  </tr>
+  <tr>
+    <td>Infinite undo/redo</td><td>No direct access to versions yet</td>
+  </tr>
+  <tr>
+    <td>Full support for Meteor publish/subscribe API</td><td>No support for Meteor allow/deny API yet (allow all by default!)</td>
+  </tr>
+  <tr>
+    <td>Good automatic conflict-resolution on object level</td><td>No in-field versioning/OT yet, e.g. no collaborative String type</td>
+  </tr>
+  <tr>
+    <td>Easy configuration and querying</td><td>Less comfortable mutator (insert/update/remove) API</td>
+  </tr>
+  <tr>
+    <td>Good integration with Meteor</td><td>Missing test suite</td>
+  </tr>
+</table>
+
+There's no specific timeline to remove the limitations. The security limitation will probably be fixed within the
+next six months. On the other hand I have no need for a versioned string so far. So how can you help yourself to
+remove limitations?
+
+1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer
+documentation](HACKING.md).
+developer documentation. I'll help you with all my knowledge and ideas if you are interested in working as a team.
+2. I can provide exactly what YOU need when you contract me. If you donate then please write a comment or contact me
+by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
+
+<a href='http://www.pledgie.com/campaigns/19414'>
+  <img alt='Click here to support Meteor versioning and make a donation at www.pledgie.com!'
+    src='http://www.pledgie.com/campaigns/19414.png?skin_name=chrome' border='0' />
+</a>
+
 
 Requirements
 ------------
@@ -68,7 +111,36 @@ $ mrt add versioning
 Usage
 -----
 
-See the following sample code which works both, on the client and server. The example is in CoffeeScript for better readability.
+To get you up and running quickly here a simple example:
+
+``` javascript
+var tx = Meteor.tx;
+
+// Create a versioned collection.
+var Todos = new Meteor.Collection('todos', {versioned: true});
+
+// 1st transaction: insert an object into the collection.
+var todoId = Todos.insertOne({
+  title: 'Implement undo in my Meteor app',
+  details: 'Learn the meteor-versioning package and see whether it does what I need.'
+});
+tx.commit();
+
+// 2nd transaction: update the object.
+Todos.setProperty(todoId, 'details', 'Doesn\'t seem to be difficult...');
+tx.commit();
+
+// Undo the 2nd transaction.
+tx.undo(); // The content of the 'details' field is now "Learn the...".
+
+// Redo the 2nd transaction.
+tx.redo(); // The content of the 'details' field is "Doesn't seem to be..." again.
+```
+
+
+The next example comes with in-depth comments and is more complex to give an overview over the full
+functionality of the package. It should work both, on the client and server. This example is in
+CoffeeScript for better readability.
 
 ``` coffeescript
 # Meteor.tx points to the global transaction manager.
@@ -443,6 +515,14 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
+Bugs
+----
+
+There are no known bugs but the package has not yet been thoroughly tested
+across many platforms. If you encounter a bug let me know by posting an issue
+to github.
+
+
 Known Limitations / Todos
 -------------------------
 
@@ -455,6 +535,11 @@ Known Limitations / Todos
 * We should implement a versioned text type so that we can track
   and merge in-field changes for strings. This requires implementation
   of a treedoc balancing / treedoc OT protocol.
+* There is no good abort() implementation yet if commiting a transaction
+  hits a bug. Errors during commit should not occur unless you hit a bug.
+  If this happens then your undo/redo stack will most probably be invalid
+  and you cannot be sure that you have a consistent database. Please report
+  all errors during commit and I'll fix them as quickly as possible.
 
 
 Package Dependencies
@@ -480,3 +565,11 @@ Contributions
 Contributions are welcome! Just make a pull request and I'll definitely check it out.
 
 If you don't know what to work on: Have a look at the "Known Limitations" above.
+
+For an introduction to hacking the package, see the [developer documentation](HACKING.md).
+
+
+Credit
+------
+
+Thanks to Thomas Knight for his detailed and valuable feedback wrt this documentation.
