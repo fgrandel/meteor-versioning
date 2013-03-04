@@ -1,85 +1,53 @@
-Undo/Redo, Versioning, Improved Automatic Conflict Resolution and Transactions for Meteor Collections
-=====================================================================================================
+# Meteor package for versioned (cross-)document (many-)field writes with eventual consistency, and concurrent version de-/re-activation
+
+### First an example not possible without recreating something like this package
+
+Imagine you have an online shop powered by Meteor. Before you leave the office for the day, you tell your co-worker that one of you should change the description of a specific product, but don't say when. Unaware of each other, you both work quite hard on a new description, and very coincidentally, you both concurrently change the description.
+
+Neither of you notice this. (Your co-worker immediately shuts his laptop and ignores it, satisfied with his change. But by the eventual consistency rules, your description is live, and so you only ever see your description.) During the same session as your first change, you think that there was an error in your description, and since you don't have time to change it now, you copy your description to your notepad for later, and 'undo' your change to the description, and immediately ignore it until the next day.
+
+The next day, your co-worker says that using his new description, you sold many more units. And he was glad his description had been active over night.
+
+This happened because you were using this package, and your co-worker's version of the description had not been undone, and was now the latest version.
+
+### What this package can do for you
+
+**Out-of-the-box Meteor** only provides one way to handle concurrent writing to a field in a document: the last write on the field overwrites all other previous writes to that field.
+
+**You may have some problems with this out-of-the-box behavior:**
+
+* Previously-written data will be lost, and will not be accessible unless you record it somewhere
+* You cannot easily, flexibly, and atomically write a set of changes to more than one document
+
+This package applies some magic to Meteor collections so they become versioned across documents and collections.
+
+**The benefits of this package are:**
+
+* You can package an arbitrary set of changes across any collections and collection objects into a single version of changes.
+* You can deactivate and reactivate a version from the originating client, while concurrent updates continue from other clients.
+* You have an automatic server-side trail of all sets of changes.
+
+*The basis of this technology is the study of Conflict-free Replicative Data Types (CRDTs) originally described by people at Inria, a public science and technology institution in France.*
 
 
-What does this package do and what not (yet)?
----------------------------------------------
+### But while providing some important functions, this package has some limitations that may be relevant to you.
 
-If you want to get your hands dirty immediately then move on to the [Installation](#installation) and
-[Usage](#usage) sections.
-
-This package provides four additional and closely related features to Meteor:
-
-1. Transactions
-2. Infinite-Level Undo/Redo
-3. Automatic Conflict Resolution for Concurrent Distributed Transactions ("Preservation of Intent and Causality")
-4. Versioning of Collection Objects
+| Limitations |
+| --- |
+| **No support for allow/deny** |
+| No test suite |
+| Incomplete *versions* can exist on server failure |
+| All versions are persistently-stored server-side, together with metadata |
+| No simple API to access specific versions |
+| (Cannot track in-field changes. But that could be expected to be as a separate project.) |
 
 
-What does this mean?
+There's no specific timeline to remove the limitations. The allow/deny limitation will probably be fixed within the next six months.
 
-The package applies some magic to Meteor collections so they become versioned and transactional. This
-means that you can package an arbitrary number of changes across an arbitrary number of collections and
-collection objects into a single transaction that will either atomically succeed or fail.
+But you can you help yourself to remove limitations:
 
-Based on this transactional behavior, the package provides an infinite-level, client-specific undo/redo
-stack so that you can undo (or redo) any previously executed transaction with an API call as simple as
-`undo()` (or `redo()`).
-
-Meteor's 'last-write-wins' default conflict resolution mechanism does not work well when you have many
-users working on a few objects. Conflicting changes will simply replace each other without trying
-to intelligently guess how changes could be "merged" to better reflect the intent of collaborating users.
-
-We replace this default behavior with an improved conflict resolution mechanism preserving causality
-and intent. This is achieved with a technology that is equivalent to
-"[Operational Transformation](https://en.wikipedia.org/wiki/Operational_transformation)" (OT), called
-"[Commutative Replicated Data Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
-The net effect is that concurrent updates from different clients to the same collection object will not
-overwrite each other but will be merged intelligently. We currently merge objects at the field level.
-This means that in-field changes (e.g. concurrent insertions into the same text field) can not yet be tracked.
-
-Versioning is already built into the functionality of the package and can be used in principle. We just do
-not yet provide a high-level API to retrieve specific versions of a collection or an object. Every
-versioned collection comes with a second "twin collection" that contains the whole version history of
-all objects. You can have a look at the Mongo database and you'll see what I mean. We'll eventually
-provide a public high-level API to access that collection more comfortably. But if you feel brave you can
-already have a look at it and try to figure out how versioning is being implemented. Have a look
-at [this inline comment](https://github.com/jerico-dev/meteor-versioning/blob/master/crdt.coffee#L39) which
-will help you to better understand the data format.
-
-While these are certainly important features there are also still a few important limitations to the package
-that may be relevant to you. We have a full "Todo and Known Limitations" section below. For your convenience
-I'll list the most important pros and cons right here:
-
-<table>
-  <tr>
-    <th>Features</th><th>Limitations</th>
-  </tr>
-  <tr>
-    <td>Infinite undo/redo</td><td>No direct access to versions yet</td>
-  </tr>
-  <tr>
-    <td>Full support for Meteor publish/subscribe API</td><td>No support for Meteor allow/deny API yet (allow all by default!)</td>
-  </tr>
-  <tr>
-    <td>Good automatic conflict-resolution on object level</td><td>No in-field versioning/OT yet, e.g. no collaborative String type</td>
-  </tr>
-  <tr>
-    <td>Easy configuration and querying</td><td>Less comfortable mutator (insert/update/remove) API</td>
-  </tr>
-  <tr>
-    <td>Good integration with Meteor</td><td>Missing test suite</td>
-  </tr>
-</table>
-
-There's no specific timeline to remove the limitations. The security limitation will probably be fixed within the
-next six months. On the other hand I have no need for a versioned string so far. So how can you help yourself to
-remove limitations?
-
-1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer
-documentation](HACKING.md). I'll help you with all my knowledge and ideas if you are interested in working as a team.
-2. I can provide exactly what YOU need when you contract me. If you donate then please accompany your donation with
-a comment or contact me by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
+1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer documentation](HACKING.md). I'll help you with all my knowledge and ideas if you are interested in working as a team.
+2. I can provide exactly what YOU need when you contract me. If you donate then please accompany your donation with a comment or contact me by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
 
 <a href='http://www.pledgie.com/campaigns/19414'>
   <img alt='Click here to support Meteor versioning and make a donation at www.pledgie.com!'
@@ -87,16 +55,14 @@ a comment or contact me by email (jerico.dev@gmail.com) to let me know what exac
 </a>
 
 
-Requirements
-------------
+## Requirements
 
 Meteor introduced compatibility breaking changes with it's version 0.5.7. Due to this:
 - Meteor 0.5.5 or 0.5.6: Use version 0.3.1 of this package. This version will no longer be developed.
 - Meteor 0.5.7 and onwards: Use the most recent version of this package.
 
 
-Installation
-------------
+## Installation
 
 The package can be installed with [Meteorite](https://github.com/oortcloud/meteorite/).
 
@@ -106,8 +72,7 @@ Type inside your application directory:
 $ mrt add versioning
 ```
 
-Usage
------
+## Usage
 
 To get you up and running quickly here a simple example:
 
@@ -265,8 +230,7 @@ nodesWithEdges = Nodes.find().fetch()
 ```
 
 
-Publish/Subscribe
------------------
+## Publish/Subscribe
 
 `Meteor.publish()` and `Meteor.subscribe()` work normally with versioned
 collections.
@@ -276,8 +240,7 @@ will be purged as it would otherwise contain operations on objects that are
 no longer available.
 
 
-Security
---------
+## Security
 
 All changes to the versioned connection are packaged as transactions and
 then funneled through an internal Meteor method. We currently do not check any
@@ -287,24 +250,21 @@ This means that setting allow/deny rules on a versioned collection will
 NOT WORK right now. We'll fix this in a later version.
 
 
-Cursors
--------
+## Cursors
 
 Cursors returned by calling `find()/findOne()` on a versioned collection will
 work normally. This includes all sub-methods of a cursor, e.g. `forEach()/map()`,
 observers, etc.
 
 
-Latency Compensation
---------------------
+## Latency Compensation
 
 Updates to versioned collections have built-in latency compensation. Changes to
 versioned collections on the client will be simulated until the server returns
 with an authoritative version of the collection.
 
 
-API reference
--------------
+## API reference
 
 ### Meteor.tx
 
@@ -516,8 +476,7 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
-Resource Usage
---------------
+## Resource Usage
 
 It won't come as a surprise that versioned collections consume considerably
 more resources both, on the client and on the server, than a non-versioned collection.
@@ -579,16 +538,14 @@ This is mainly due to the following additional processing steps:
     as latency compensation comes up for this.
 
 
-Bugs
-----
+## Bugs
 
 There are no known bugs but the package has not yet been thoroughly tested
 across many platforms. If you encounter a bug let me know by posting an issue
 to github.
 
 
-Known Limitations / Todos
--------------------------
+## Known Limitations / Todos
 
 * Security (allow/deny) does not work for versioned collections.
 * The current mutator API is too low-level. We should implement the full
@@ -606,8 +563,7 @@ Known Limitations / Todos
   all errors during commit and I'll fix them as quickly as possible.
 
 
-Package Dependencies
---------------------
+## Package Dependencies
 
 The versioning package relies on a simple [logger](https://github.com/jerico-dev/meteor-logger)
 and [i18n](https://github.com/jerico-dev/meteor-i18n) implementation. Both have
@@ -617,14 +573,12 @@ installed when installing this package.
 Have a look at the documentation of the two packages if you'd like to use them in your project.
 
 
-Questions and Feature Requests
-------------------------------
+## Questions and Feature Requests
 
 If you have feature requests or other feedback please write to jerico.dev@gmail.com.
 
 
-Contributions
--------------
+## Contributions
 
 Contributions are welcome! Just make a pull request and I'll definitely check it out.
 
@@ -633,7 +587,6 @@ If you don't know what to work on: Have a look at the "Known Limitations" above.
 For an introduction to hacking the package, see the [developer documentation](HACKING.md).
 
 
-Credit
-------
+## Credit
 
 Thanks to Thomas Knight for his detailed and valuable feedback wrt this documentation.
