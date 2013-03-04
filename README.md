@@ -1,135 +1,80 @@
-Undo/Redo, Versioning, Improved Automatic Conflict Resolution and Transactions for Meteor Collections
-=====================================================================================================
+# Undo/Redo, Improved Conflict Resolution and Transactions for Meteor Collections
 
 
-What does this package do and what not (yet)?
----------------------------------------------
+## What this package can do for you and what not
 
-If you want to get your hands dirty immediately then move on to the [Installation](#installation) and
-[Usage](#usage) sections.
+If you want to get your hands dirty immediately then move on to the
+[Installation](#installation) and [Usage](#usage) sections.
 
-This package provides four additional and closely related features to Meteor:
+Out-of-the-box Meteor uses field-level "last-write-wins" to handle concurrent
+writing to a field in a document. This means that the last write on the field
+overwrites all previous writes to that field. As Meteor currently uses MongoDB
+in the backend there's also no support for transactions that span several
+objects.
 
-1. Transactions
-2. Infinite-Level Undo/Redo
-3. Automatic Conflict Resolution for Concurrent Distributed Transactions ("Preservation of Intent and Causality")
-4. Versioning of Collection Objects
+There are situations where this default behavior may not be what you want:
+* Previously-written data will be completely lost when you change a document.
+  It's not possible to undo changes and revert to a prior version of your
+  document.
+* This is most problematic when dealing with concurrent real-time updates to
+  the same field where it's not usually intended that changes permanently
+  overwrite each other.
+* Due to the lack of transactions and Meteor's real-time, reactive behavior,
+  clients may see inconsistent data which can cause flicker, difficult-to-debug
+  errors or race conditions.
 
+This package adds a few closely related features to Meteor to provide you
+with additional options:
+
+ 1. infinite-level undo/redo
+ 2. (basic) transactions
+ 3. improved automatic conflict resolution for concurrent updates
+ 4. versioning of collection objects
 
 What does this mean?
 
-The package applies some magic to Meteor collections so they become versioned and transactional. This
-means that you can package an arbitrary number of changes across an arbitrary number of collections and
-collection objects into a single transaction that will either atomically succeed or fail.
+This package applies some magic to Meteor collections so they become versioned
+across documents and collections.
 
-Based on this transactional behavior, the package provides an infinite-level, client-specific undo/redo
-stack so that you can undo (or redo) any previously executed transaction with an API call as simple as
-`undo()` (or `redo()`).
+With this package...
+ * Every client has an infinite list of prior local changes. This means
+   that a user can undo arbitrary locally initiated transactions even while
+   other users make concurrent changes to the same fields in the same document.
+ * You can package an arbitrary set of changes across any collections and
+   collection objects into a single (mostly) atomic transaction.
+ * You have an automatic server-side audit trail of all changes.
 
-Meteor's 'last-write-wins' default conflict resolution mechanism does not work well when you have many
-users working on a few objects. Conflicting changes will simply replace each other without trying
-to intelligently guess how changes could be "merged" to better reflect the intent of collaborating users.
+At the core of this package is a technology equivalent to "[Operational
+Transformation](https://en.wikipedia.org/wiki/Operational_transformation)"
+(OT), called "[Commutative Replicated Data
+Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
+The net effect is that concurrent updates from different clients to the same
+collection object will not overwrite each other but will be merged
+intelligently on field level.
 
-We replace this default behavior with an improved conflict resolution mechanism preserving causality
-and intent. This is achieved with a technology that is equivalent to
-"[Operational Transformation](https://en.wikipedia.org/wiki/Operational_transformation)" (OT), called
-"[Commutative Replicated Data Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
-The net effect is that concurrent updates from different clients to the same collection object will not
-overwrite each other but will be merged intelligently. We currently merge objects at the field level.
-This means that in-field changes (e.g. concurrent insertions into the same text field) can not yet be tracked.
+There are still a few important limitations to the package that may be relevant
+to you. We have a full "Todo and Known Limitations" section below. For your
+convenience I'll list the most important pros and cons right here:
 
-Versioning is already built into the functionality of the package and can be used in principle. We just do
-not yet provide a high-level API to retrieve specific versions of a collection or an object. Every
-versioned collection comes with a second "twin collection" that contains the whole version history of
-all objects. You can have a look at the Mongo database and you'll see what I mean. We'll eventually
-provide a public high-level API to access that collection more comfortably. But if you feel brave you can
-already have a look at it and try to figure out how versioning is being implemented. Have a look
-at [this inline comment](https://github.com/jerico-dev/meteor-versioning/blob/master/crdt.coffee#L39) which
-will help you to better understand the data format.
+|Features|Limitations|
+|--------|-----------|
+|Full support for Meteor publish/subscribe API|**No support for Meteor allow/deny**|
+|Infinite undo/redo|No simple API to access specific versions|
+|Improved automatic conflict-resolution on object level|No in-field versioning/OT yet, e.g. no OT-String type|
+|Basic transaction support|Incomplete transactions will not be recovered after a server failure|
+|Good integration with Meteor|No test suite|
 
-While these are certainly important features there are also still a few important limitations to the package
-that may be relevant to you. We have a full "Todo and Known Limitations" section below. For your convenience
-I'll list the most important pros and cons right here:
+As I'm doing this in my free time there's no specific timeline to remove the
+limitations. But you can help yourself to remove them:
 
-<table>
-  <tr>
-    <th>Features</th><th>Limitations</th>
-  </tr>
-  <tr>
-    <td>Infinite undo/redo</td><td>No direct access to versions yet</td>
-  </tr>
-  <tr>
-    <td>Full support for Meteor publish/subscribe API</td><td>No support for Meteor allow/deny API yet (allow all by default!)</td>
-  </tr>
-  <tr>
-    <td>Good automatic conflict-resolution on object level</td><td>No in-field versioning/OT yet, e.g. no collaborative String type</td>
-  </tr>
-  <tr>
-    <td>Easy configuration and querying</td><td>Less comfortable mutator (insert/update/remove) API</td>
-  </tr>
-  <tr>
-    <td>Good integration with Meteor</td><td>Missing test suite</td>
-  </tr>
-</table>
-
-There's no specific timeline to remove the limitations. The security limitation will probably be fixed within the
-next six months. On the other hand I have no need for a versioned string so far. So how can you help yourself to
-remove limitations?
-
-1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer
-documentation](HACKING.md). I'll help you with all my knowledge and ideas if you are interested in working as a team.
-2. I can provide exactly what YOU need when you contract me. If you donate then please accompany your donation with
-a comment or contact me by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
-# Meteor package for versioned (many-)field (cross-)document writes with eventual consistency, and concurrent version de-/re-activation
-
-### First an example not possible without recreating something like this package
-
-Imagine you have an online shop powered by Meteor. Before you leave the office for the day, you tell your co-worker that one of you should change the description of a specific product, but don't say when. Unaware of each other, you both work quite hard on a new description, and very coincidentally, you both concurrently change the description.
-
-Neither of you notice this. (Your co-worker immediately shuts his laptop and ignores it, satisfied with his change. But by the eventual consistency rules, your description is live, and so you only ever see your description.) During the same session as your first change, you think that there was an error in your description, and since you don't have time to change it now, you copy your description to your notepad for later, and 'undo' your change to the description, and immediately ignore it until the next day.
-
-The next day, your co-worker says that using his new description, you sold many more units. And he was glad his description had been active over night.
-
-This happened because you were using this package, and your co-worker's version of the description had not been undone, and was now the latest version.
-
-### What this package can do for you
-
-**Out-of-the-box Meteor** only provides one way to handle concurrent writing to a field in a document: the last write on the field overwrites all other previous writes to that field.
-
-**You may have some problems with this out-of-the-box behavior:**
-
-* Previously-written data will be lost, and will not be accessible unless you record it somewhere
-* You cannot easily, flexibly, and atomically write a set of changes to more than one document
-
-This package applies some magic to Meteor collections so they become versioned across documents and collections.
-
-**The benefits of this package are:**
-
-* You can package an arbitrary set of changes across any collections and collection objects into a single version of changes.
-* You can deactivate and reactivate a version from the originating client, while concurrent updates continue from other clients.
-* You have an automatic server-side trail of all sets of changes.
-
-*The basis of this technology is the study of Conflict-free Replicative Data Types (CRDTs) originally described by people at Inria, a public science and technology institution in France.*
-
-
-### But while providing some important functions, this package has some limitations that may be relevant to you.
-
-| Limitations |
-| --- |
-| **No support for allow/deny** |
-| No test suite |
-| Incomplete *versions* can exist on server failure |
-| All versions are persistently-stored server-side, together with metadata |
-| No simple API to access specific versions |
-| (Cannot track in-field changes. But that could be expected to be as a separate project.) |
-
-
-There's no specific timeline to remove the limitations. The allow/deny limitation will probably be fixed within the next six months.
-
-But you can you help yourself to remove limitations:
-
-1. Contributions are welcome! Feel free to provide a pull request. We also have some short introductory [developer documentation](HACKING.md). I'll help you with all my knowledge and ideas if you are interested in working as a team.
-2. I can provide exactly what YOU need when you contract me. If you donate then please accompany your donation with a comment or contact me by email (jerico.dev@gmail.com) to let me know what exactly I should work on for you.
+ 1. Contributions are welcome! Feel free to provide a pull request. We also
+    have some short introductory [developer documentation](HACKING.md). I'll
+    help you with all my knowledge and ideas if you are interested in working
+    as a team.
+ 2. I can provide exactly what YOU need when you contract me. If you donate
+    then please accompany your donation with a comment or contact me by email
+    (jerico.dev@gmail.com) to let me know what exactly I should work on for
+    you.
 
 <a href='http://www.pledgie.com/campaigns/19414'>
   <img alt='Click here to support Meteor versioning and make a donation at www.pledgie.com!'
@@ -139,14 +84,17 @@ But you can you help yourself to remove limitations:
 
 ## Requirements
 
-Meteor introduced compatibility breaking changes with it's version 0.5.7. Due to this:
-- Meteor 0.5.5 or 0.5.6: Use version 0.3.1 of this package. This version will no longer be developed.
-- Meteor 0.5.7 and onwards: Use the most recent version of this package.
+Meteor introduced compatibility breaking changes with it's version 0.5.7. Due
+to this:
+* Meteor 0.5.5 or 0.5.6: Use version 0.3.1 of this package. This version will
+  no longer be developed.
+* Meteor 0.5.7 and onwards: Use the most recent version of this package.
 
 
 ## Installation
 
-The package can be installed with [Meteorite](https://github.com/oortcloud/meteorite/).
+The package can be installed with
+[Meteorite](https://github.com/oortcloud/meteorite/).
 
 Type inside your application directory:
 
@@ -186,9 +134,9 @@ console.log(Todos.findOne()); // The content of the 'details' field is "Doesn't 
 ```
 
 
-The next example comes with in-depth comments and is more complex to give an overview over the full
-functionality of the package. It should work both, on the client and server. This example is in
-CoffeeScript for better readability.
+The next example comes with in-depth comments and is more complex to give an
+overview over the full functionality of the package. It should work both, on
+the client and server. This example is in CoffeeScript for better readability.
 
 ``` coffeescript
 # Meteor.tx points to the global transaction manager.
@@ -353,9 +301,9 @@ with an authoritative version of the collection.
 This is the transaction manager. It contains global functions to commit or roll
 back transactions. It also provides the redo/undo feature.
 
-Undo/redo histories are kept separately for all clients. This is the usual behavior
-in collaborative systems and avoids that concurrent operations from other users can
-be undone.
+Undo/redo histories are kept separately for all clients. This is the usual
+behavior in collaborative systems and avoids that concurrent operations from
+other users can be undone.
 
 #### Meteor.tx.commit()
 
@@ -368,15 +316,15 @@ scheduled since the last `commit()` call.
 
 #### Meteor.tx.undo()
 
-Undo on the last transaction committed by this client (or server). The undo history
-is infinite but it is kept in RAM and therefore will not survive a page reload or
-server restart.
+Undo on the last transaction committed by this client (or server). The undo
+history is infinite but it is kept in RAM and therefore will not survive a page
+reload or server restart.
 
 #### Meteor.tx.redo()
 
-Redo the last undone transaction. The redo history contains all undone transactions
-of the local client. It is kept in RAM, too, and will not survive a server restart
-or page reload.
+Redo the last undone transaction. The redo history contains all undone
+transactions of the local client. It is kept in RAM, too, and will not survive
+a server restart or page reload.
 
 Committing a new transaction will purge the redo (but not the undo) stack.
 
@@ -389,10 +337,10 @@ and to understand how this Meteor extension actually works.
 
 Have a look at the "transactions" collection in Mongo.
 
-I'm not currently providing a versioning API (i.e. "give me the exact
-version of object X at time Y"). It is perfectly possible, however,
-to reconstruct all intermediate states of every object from the transaction
-log and this will probably be explicitly supported in the future.
+I'm not currently providing a versioning API (i.e. "give me the exact version
+of object X at time Y"). It is perfectly possible, however, to reconstruct all
+intermediate states of every object from the transaction log and this will
+probably be explicitly supported in the future.
 
 
 
@@ -426,33 +374,28 @@ The constructor of `Meteor.Collection` takes two arguments:
        distinguish updates from insertions/deletions.
    See the "Usage" section above for an example.
 
-If you are just versioning a key/value document
-with scalar values then no property specification is
-required:
+If you are just versioning a key/value document with scalar values then no
+property specification is required:
 
 ``` javascript
 myColl = new Meteor.Collection('myColl', {versioned: true});
 ```
 
-NB: The usual mutators `insert()`, `update()` and `remove()`
-will not work for a versioned collection and have been
-hidden.
+NB: The usual mutators `insert()`, `update()` and `remove()` will not work for
+a versioned collection and have been hidden.
 
-For the moment being the mutator API of a versioned
-collection is quite different (and much uglier) than
-the API of the usual Meteor collection types. We
-implement a low-level API that doesn't allow for batch
-operations. The only reason is that I don't need anything
-more sophisticated myself and I don't have time
-right now to implement more unless someone wants to
-pay me for it. ;-) In the long term I'd like to implement
-the complete MiniMongo API for versioned collections.
-Feel free to step in with a pull request if you want
-to work in that direction.
+For the moment being the mutator API of a versioned collection is quite
+different (and much uglier) than the API of the usual Meteor collection types.
+We implement a low-level API that doesn't allow for batch operations. The only
+reason is that I don't need anything more sophisticated myself and I don't have
+time right now to implement more unless someone wants to pay me for it. ;-) In
+the long term I'd like to implement the complete MiniMongo API for versioned
+collections.  Feel free to step in with a pull request if you want to work in
+that direction.
 
-For queries you can use the usual Meteor `find()`/`findOne()`
-API so you get all of Meteor's query flexibility,
-observers, reactivity, etc. as with a normal collection.
+For queries you can use the usual Meteor `find()`/`findOne()` API so you get
+all of Meteor's query flexibility, observers, reactivity, etc. as with a normal
+collection.
 
 
 #### Meteor.Collection.insertOne(document)
@@ -463,13 +406,11 @@ Arguments:
 
 Use this to insert an arbitrary new versioned document.
 
-If the object contains sub-arrays or a list of nested
-sub-documents then it must conform to the property
-specification you provided for the collection!
+If the object contains sub-arrays or a list of nested sub-documents then it
+must conform to the property specification you provided for the collection!
 
-If the object contains an `_id` property then this
-will be used to save the object. Otherwise Meteor will
-generate an ID for you.
+If the object contains an `_id` property then this will be used to save the
+object. Otherwise Meteor will generate an ID for you.
 
 The method will return the ID of the object.
 
@@ -480,9 +421,8 @@ Arguments:
 
 1. `id`: The ID of the document to remove.
 
-This method will make the object corresponding to the given ID
-"invisible". The object can be restored by calling `Meteor.tx.undo()`
-later.
+This method will make the object corresponding to the given ID "invisible". The
+object can be restored by calling `Meteor.tx.undo()` later.
 
 
 #### Meteor.Collection.setProperty(id, key, value)
@@ -495,16 +435,16 @@ Arguments:
 
 This updates the existing object identified by the given ID.
 
-The method behaves differently, depending on whether you are
-updating a scalar property or a property that contains a
-collection (an ordered array or a keyed list of sub-documents).
+The method behaves differently, depending on whether you are updating a scalar
+property or a property that contains a collection (an ordered array or a keyed
+list of sub-documents).
 
-When you are updating a scalar value then the new value will
-replace the existing value.
+When you are updating a scalar value then the new value will replace the
+existing value.
 
-When you update a collection then the new value will be added
-to the collection. Use `Meteor.Collection.unsetProperty()`
-to actually remove an entry (or all entries) from a collection.
+When you update a collection then the new value will be added to the
+collection. Use `Meteor.Collection.unsetProperty()` to actually remove an entry
+(or all entries) from a collection.
 
 
 #### Meteor.Collection.unsetProperty(id, key[, locator])
@@ -520,32 +460,28 @@ Arguments:
 
 This updates the existing object identified by the given ID.
 
-When no `locator` is given then the property (and in the case
-of a collection all entries of the collection) will be marked
-"invisible".
+When no `locator` is given then the property (and in the case of a collection
+all entries of the collection) will be marked "invisible".
 
-When you update a collection then you can give a `locator` to
-only mark a specific element of the collection "invisible".
+When you update a collection then you can give a `locator` to only mark a
+specific element of the collection "invisible".
 
-In the case of a versioned ordered array, the `locator` is the
-index of the array element.
+In the case of a versioned ordered array, the `locator` is the index of the
+array element.
 
-In the case of a versioned unordered (keyed) hash-list of
-sub-documents the `locator` represents a value that will be
-used to uniquely identify the sub-document to be "hidden".
-Meteor looks for the given value in the property that
-has been specified as the `locator` property. See the
-`props` option of the constructor of `Meteor.Collection`
-above.
+In the case of a versioned unordered (keyed) hash-list of sub-documents the
+`locator` represents a value that will be used to uniquely identify the
+sub-document to be "hidden".  Meteor looks for the given value in the property
+that has been specified as the `locator` property. See the `props` option of
+the constructor of `Meteor.Collection` above.
 
-Hidden elements can be made visible again by calling
-`Meteor.tx.undo()`.
+Hidden elements can be made visible again by calling `Meteor.tx.undo()`.
 
 
 #### Meteor.Collection.reset()
 
-Call this to reset the version history of the collection. This will
-give you an empty collection without any undo/redo/versioning information.
+Call this to reset the version history of the collection. This will give you an
+empty collection without any undo/redo/versioning information.
 
 Only do this if you really want to start over.
 
@@ -554,20 +490,21 @@ NB: This method is only available on the server.
 
 #### Meteor.Collection.find()/findOne()
 
-Please consult the official Meteor documentation for a description
-of these methods.
+Please consult the official Meteor documentation for a description of these
+methods.
 
 
 ## Resource Usage
 
 It won't come as a surprise that versioned collections consume considerably
-more resources both, on the client and on the server, than a non-versioned collection.
+more resources both, on the client and on the server, than a non-versioned
+collection.
 
-That being said I personally never found versioning to be a space or performance
-bottleneck. Reactively updating the DOM in real time (e.g. via Meteor's spark)
-is so much slower than keeping versioned objects that I never perceived a difference.
-I therefore stick to Donald Knuth's recommendation to avoid premature optimization
-when it increases complexity.
+That being said I personally never found versioning to be a space or
+performance bottleneck. Reactively updating the DOM in real time (e.g. via
+Meteor's spark) is so much slower than keeping versioned objects that I never
+perceived a difference.  I therefore stick to Donald Knuth's recommendation to
+avoid premature optimization when it increases complexity.
 
 If you perceive performance degradation due to object versioning let me know
 and I'll try to help you find out where it comes from.
@@ -576,45 +513,51 @@ and I'll try to help you find out where it comes from.
 
 __Space:__
 
-A versioned object needs to be mirrored in a separate collection with its full version
-history for all fields plus considerable administrative information necessary to track
-the causality of concurrent updates as well as all data necessary for undo and redo.
-Have a look at the '_[your collection name]Crdt' collections in the Mongo DB for details.
+A versioned object needs to be mirrored in a separate collection with its full
+version history for all fields plus considerable administrative information
+necessary to track the causality of concurrent updates as well as all data
+necessary for undo and redo.  Have a look at the '_[your collection name]Crdt'
+collections in the Mongo DB for details.
 
-You also have to be aware that space is even consumed when you delete an object.
-Otherwise prior versions could not be recovered.
+You also have to be aware that space is even consumed when you delete an
+object.  Otherwise prior versions could not be recovered.
 
-In practice this is usually not a big problem as disk space is cheap and objects will
-only be loaded into RAM when actually being used (i.e. in a query or observer).
+In practice this is usually not a big problem as disk space is cheap and
+objects will only be loaded into RAM when actually being used (i.e. in a query
+or observer).
 
-On the server side: The same rules apply as to normal Meteor collections with the
-exception of deleted objects: While the snapshot version (latest version) will be
-removed from RAM, the version mirror will be kept in RAM as long as it is part of
-a published collection. This is necessary to enable undo on the server.
+On the server side: The same rules apply as to normal Meteor collections with
+the exception of deleted objects: While the snapshot version (latest version)
+will be removed from RAM, the version mirror will be kept in RAM as long as it
+is part of a published collection. This is necessary to enable undo on the
+server.
 
-On the client side: Space requirements on the client are considerably optimized.
-We only copy version information to the client for objects that are actually being
-published to the client.
+On the client side: Space requirements on the client are considerably
+optimized.  We only copy version information to the client for objects that are
+actually being published to the client.
 
-When you re-subscribe to a different selection of client objects then the RAM necessary
-to hold prior versioned objects will also be released. This explains why re-subscribing
-to a collection will invalidate the undo/redo history: You loose version history locally
-when you subscribe to a different partition of the collection. The full version history
-is nonetheless kept on disk, of course.
+When you re-subscribe to a different selection of client objects then the RAM
+necessary to hold prior versioned objects will also be released. This explains
+why re-subscribing to a collection will invalidate the undo/redo history: You
+loose version history locally when you subscribe to a different partition of
+the collection. The full version history is nonetheless kept on disk, of
+course.
 
 
 __Time:__
 
-Updating versioned objects is considerably slower than updating non-versioned objects.
+Updating versioned objects is considerably slower than updating non-versioned
+objects.
 
 This is mainly due to the following additional processing steps:
  1. The transaction framework has a slight overhead over usual updates by
     handling abstract operations.
- 2. Updating the internal representation of a versioned collections is considerably
-    more complex than updating a non-versioned collection. We have to update both,
-    the object snapshot as well as the versioned object mirror.
- 3. Taking a snapshot from the versioned mirror consumes quite a few processor cycles
-    and must be done whenever an object changes.
+ 2. Updating the internal representation of a versioned collections is
+    considerably more complex than updating a non-versioned collection. We
+    have to update both, the object snapshot as well as the versioned object
+    mirror.
+ 3. Taking a snapshot from the versioned mirror consumes quite a few processor
+    cycles and must be done whenever an object changes.
  4. Replicating versioned objects accross clients takes longer as more data
     needs to be transferred to the client. This is not a problem in practice
     as latency compensation comes up for this.
@@ -633,7 +576,14 @@ to github.
 * The current mutator API is too low-level. We should implement the full
   MiniMongo API. We also should simplify property configuration (e.g.
   discover type by convention).
-* We should provide a high-level versioning API.
+* We should provide a high-level versioning API. Versioning is already built
+  into the functionality of the package and can be used in principle. We just
+  do not yet provide a simple API to retrieve specific versions of a collection
+  or an object. Every versioned collection comes with a second "twin collection"
+  that contains the whole version history of all objects. You can have a look
+  at the Mongo database and you'll see what I mean. Have a look at [this inline
+  comment](https://github.com/jerico-dev/meteor-versioning/blob/master/crdt.coffee#L39)
+  which will help you to better understand the data format.
 * We should have a test suite.
 * We should implement a versioned text type so that we can track
   and merge in-field changes for strings. This requires implementation
@@ -647,28 +597,35 @@ to github.
 
 ## Package Dependencies
 
-The versioning package relies on a simple [logger](https://github.com/jerico-dev/meteor-logger)
-and [i18n](https://github.com/jerico-dev/meteor-i18n) implementation. Both have
+The versioning package relies on a simple
+[logger](https://github.com/jerico-dev/meteor-logger) and
+[i18n](https://github.com/jerico-dev/meteor-i18n) implementation. Both have
 already been published as packages to the Atmosphere and will be automatically
 installed when installing this package.
 
-Have a look at the documentation of the two packages if you'd like to use them in your project.
+Have a look at the documentation of the two packages if you'd like to use them
+in your project.
 
 
 ## Questions and Feature Requests
 
-If you have feature requests or other feedback please write to jerico.dev@gmail.com.
+If you have feature requests or other feedback please write to
+jerico.dev@gmail.com.
 
 
 ## Contributions
 
-Contributions are welcome! Just make a pull request and I'll definitely check it out.
+Contributions are welcome! Just make a pull request and I'll definitely check
+it out.
 
-If you don't know what to work on: Have a look at the "Known Limitations" above.
+If you don't know what to work on: Have a look at the "Known Limitations"
+above.
 
-For an introduction to hacking the package, see the [developer documentation](HACKING.md).
+For an introduction to hacking the package, see the [developer
+documentation](HACKING.md).
 
 
 ## Credit
 
-Thanks to Thomas Knight for his detailed and valuable feedback wrt this documentation.
+Thanks to Thomas Knight for his detailed and valuable feedback and contribution
+to this documentation.
