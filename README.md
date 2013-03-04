@@ -1,4 +1,4 @@
-# Meteor package for versioned (many-)field (cross-)document writes with eventual consistency, and concurrent version de-/re-activation
+# Meteor package for versioned (cross-)document (many-)field writes with eventual consistency, and concurrent version de-/re-activation
 
 ### First an example not possible without recreating something like this package
 
