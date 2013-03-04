@@ -1,11 +1,9 @@
-What can I do?
-==============
+# What can I do?
 
 Please have a look at the list of [known limitations and todos](https://github.com/jerico-dev/meteor-versioning#known-limitations--todos).
 
 
-Where should I start?
-=====================
+# Where should I start?
 
 There are three main classes you'll have to understand to get started. The 'TransactionsManager' class, the replacement for Meteor's 'Collection' class and the '_CrdtDocument' class.
 
@@ -26,22 +24,19 @@ Fortunately we only implement the easier parts of the CRDT concept so far. You'l
 Feel free to contact me (jerico.dev@gmail.com) if you need assistance in understanding these concepts.
 
 
-How can I help?
-===============
+# How can I help?
 
 Every pull request is welcome. It can be to improve documentation, fix bugs, add features or remove some known limitation.
 
 If you do not know how the fork, hack, commit, pull-request cycle works, let me know.
 
 
-Can I ask questions?
-====================
+# Can I ask questions?
 
 Of course! There are no silly questions and I'll answer all of them (if I can). Please contact me by email (jerico.dev@gmail.com).
 
 
-I'm not a programmer but I need some feature really urgently.
-=============================================================
+# I'm not a programmer but I need some feature really urgently.
 
 If you're very lucky then what you need interests me personally and I'll do it for free. If you're lucky you have a budget. You can contract me as a freelancer and I'll implement exactly the feature you need. If you have a very small budget you can donate and I'll see what I can do. Please contact me beforehand if you want to be sure that your donation will be used the way you intend it.
 

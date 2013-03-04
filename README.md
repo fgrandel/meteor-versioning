@@ -55,16 +55,14 @@ But you can you help yourself to remove limitations:
 </a>
 
 
-Requirements
----
+## Requirements
 
 Meteor introduced compatibility breaking changes with it's version 0.5.7. Due to this:
 - Meteor 0.5.5 or 0.5.6: Use version 0.3.1 of this package. This version will no longer be developed.
 - Meteor 0.5.7 and onwards: Use the most recent version of this package.
 
 
-Installation
----
+## Installation
 
 The package can be installed with [Meteorite](https://github.com/oortcloud/meteorite/).
 
@@ -74,8 +72,7 @@ Type inside your application directory:
 $ mrt add versioning
 ```
 
-Usage
----
+## Usage
 
 To get you up and running quickly here a simple example:
 
@@ -233,8 +230,7 @@ nodesWithEdges = Nodes.find().fetch()
 ```
 
 
-Publish/Subscribe
----
+## Publish/Subscribe
 
 `Meteor.publish()` and `Meteor.subscribe()` work normally with versioned
 collections.
@@ -244,8 +240,7 @@ will be purged as it would otherwise contain operations on objects that are
 no longer available.
 
 
-Security
----
+## Security
 
 All changes to the versioned connection are packaged as transactions and
 then funneled through an internal Meteor method. We currently do not check any
@@ -255,24 +250,21 @@ This means that setting allow/deny rules on a versioned collection will
 NOT WORK right now. We'll fix this in a later version.
 
 
-Cursors
----
+## Cursors
 
 Cursors returned by calling `find()/findOne()` on a versioned collection will
 work normally. This includes all sub-methods of a cursor, e.g. `forEach()/map()`,
 observers, etc.
 
 
-Latency Compensation
----
+## Latency Compensation
 
 Updates to versioned collections have built-in latency compensation. Changes to
 versioned collections on the client will be simulated until the server returns
 with an authoritative version of the collection.
 
 
-API reference
----
+## API reference
 
 ### Meteor.tx
 
@@ -484,8 +476,8 @@ Please consult the official Meteor documentation for a description
 of these methods.
 
 
-Resource Usage
----
+## Resource Usage
+
 It won't come as a surprise that versioned collections consume considerably
 more resources both, on the client and on the server, than a non-versioned collection.
 
@@ -546,16 +538,14 @@ This is mainly due to the following additional processing steps:
     as latency compensation comes up for this.
 
 
-Bugs
----
+## Bugs
 
 There are no known bugs but the package has not yet been thoroughly tested
 across many platforms. If you encounter a bug let me know by posting an issue
 to github.
 
 
-Known Limitations / Todos
----
+## Known Limitations / Todos
 
 * Security (allow/deny) does not work for versioned collections.
 * The current mutator API is too low-level. We should implement the full
@@ -573,8 +563,7 @@ Known Limitations / Todos
   all errors during commit and I'll fix them as quickly as possible.
 
 
-Package Dependencies
----
+## Package Dependencies
 
 The versioning package relies on a simple [logger](https://github.com/jerico-dev/meteor-logger)
 and [i18n](https://github.com/jerico-dev/meteor-i18n) implementation. Both have
@@ -584,14 +573,12 @@ installed when installing this package.
 Have a look at the documentation of the two packages if you'd like to use them in your project.
 
 
-Questions and Feature Requests
----
+## Questions and Feature Requests
 
 If you have feature requests or other feedback please write to jerico.dev@gmail.com.
 
 
-Contributions
----
+## Contributions
 
 Contributions are welcome! Just make a pull request and I'll definitely check it out.
 
@@ -600,7 +587,6 @@ If you don't know what to work on: Have a look at the "Known Limitations" above.
 For an introduction to hacking the package, see the [developer documentation](HACKING.md).
 
 
-Credit
----
+## Credit
 
 Thanks to Thomas Knight for his detailed and valuable feedback wrt this documentation.
