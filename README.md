@@ -1,5 +1,5 @@
-Undo/Redo, Versioning, Operational Transformation and Transactions for Meteor Collections
-=========================================================================================
+Undo/Redo, Versioning, Improved Automatic Conflict Resolution and Transactions for Meteor Collections
+=====================================================================================================
 
 
 What does this package do and what not (yet)?
@@ -12,8 +12,7 @@ This package provides four additional and closely related features to Meteor:
 
 1. Transactions
 2. Infinite-Level Undo/Redo
-3. Automatic Conflict Resolution for Concurrent Distributed Transactions (aka "Operational
-   Transformation", "Preservation of Intent and Causality")
+3. Automatic Conflict Resolution for Concurrent Distributed Transactions ("Preservation of Intent and Causality")
 4. Versioning of Collection Objects
 
 
@@ -28,11 +27,11 @@ stack so that you can undo (or redo) any previously executed transaction with an
 `undo()` (or `redo()`).
 
 Meteor's 'last-write-wins' default conflict resolution mechanism does not work well when you have many
-users working on the same few objects. Conflicting changes will simply replace each other without trying
+users working on a few objects. Conflicting changes will simply replace each other without trying
 to intelligently guess how changes could be "merged" to better reflect the intent of collaborating users.
 
-We replace this default behavior with fully automatic conflict resolution preserving causality and intent.
-This is achieved with a technology that is equivalent to
+We replace this default behavior with an improved conflict resolution mechanism preserving causality
+and intent. This is achieved with a technology that is equivalent to
 "[Operational Transformation](https://en.wikipedia.org/wiki/Operational_transformation)" (OT), called
 "[Commutative Replicated Data Types](http://hal.inria.fr/docs/00/44/59/75/PDF/icdcs09-treedoc.pdf)" (CRDT).
 The net effect is that concurrent updates from different clients to the same collection object will not
