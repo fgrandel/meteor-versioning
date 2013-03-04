@@ -12,7 +12,7 @@ This happened because you were using this package, and your co-worker's version 
 
 ### What this package can do for you
 
-**Out-of-the-box Meteor** only provides one way handling concurrent writing to a field in a document: the last write on the field overwrites all other previous writes to that field.
+**Out-of-the-box Meteor** only provides one way to handle concurrent writing to a field in a document: the last write on the field overwrites all other previous writes to that field.
 
 **You may have some problems with this out-of-the-box behavior:**
 
