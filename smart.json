@@ -1,9 +1,9 @@
 {
   "name": "versioning",
-  "description": "Adds undo/redo, versioning, improved automatic conflict resolution and transactions to Meteor collections.",
+  "description": "Undo/redo, improved conflict resolution and transactions for Meteor collections.",
   "homepage": "https://github.com/jerico-dev/meteor-versioning",
   "author": "Florian Grandel (https://github.com/jerico-dev)",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "git": "https://github.com/jerico-dev/meteor-versioning.git",
   "packages": {
     "i18n": {},

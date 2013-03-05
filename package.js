@@ -1,5 +1,5 @@
 Package.describe({
-  summary: "Adds undo, redo, versioning, improved automatic conflict resolution and transactions to Meteor collections."
+  summary: "Undo/redo, improved conflict resolution and transactions for Meteor collections."
 });
 
 Package.on_use(function (api, where) {
