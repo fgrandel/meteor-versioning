@@ -1,5 +1,7 @@
 # Undo/Redo, Improved Conflict Resolution and Transactions for Meteor Collections
 
+**This package is no longer being actively maintained and has known incompatibilites
+with newer versions of Meteor. Want to take it over? Fork and push to atmosphere...**
 
 ## What this package can do for you and what not
 
