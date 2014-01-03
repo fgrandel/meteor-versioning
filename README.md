@@ -3,6 +3,22 @@
 **This package is no longer being actively maintained and has known incompatibilites
 with newer versions of Meteor. Want to take it over? Fork and push to atmosphere...**
 
+# Alternative solutions:
+
+For versioned data:
+* Consider [this mongo scheme](https://github.com/thiloplanz/v7files/wiki/Vermongo)
+  with "shadow" collections (possibly with TTLs or capped) that contain older
+  versions of documents.
+
+For content i18n:
+* For i18n of app and template messages see: https://github.com/gadicohen/meteor-messageformat
+* To index user data correctly in MongoDB, it must be stored in document with
+  proper language setting. Thus, [allow storing multiple document versions for
+  a contentID](http://docs.mongodb.org/manual/tutorial/create-text-index-on-multi-language-collection)
+  in the "current" collection, namely a version for each language.
+  For example, versions: 3 (en) and 4 (sp), while the shadow collection still
+  contains 1 (en) and 2 (en).
+
 ## What this package can do for you and what not
 
 If you want to get your hands dirty immediately then move on to the
@@ -630,4 +646,5 @@ documentation](HACKING.md).
 ## Credit
 
 Thanks to Thomas Knight for his detailed and valuable feedback and contribution
-to this documentation.
+to this documentation. Thanks to [testbird](https://github.com/testbird) for
+pointing out alternative solutions.
