@@ -3,7 +3,7 @@
 **This package is no longer being actively maintained and has known incompatibilites
 with newer versions of Meteor. Want to take it over? Fork and push to atmosphere...**
 
-# Alternative solutions:
+## Alternative solutions:
 
 For versioned data:
 * Consider [this mongo scheme](https://github.com/thiloplanz/v7files/wiki/Vermongo)
